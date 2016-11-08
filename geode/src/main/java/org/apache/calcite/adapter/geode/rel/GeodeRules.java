@@ -16,7 +16,6 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
-import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -70,7 +69,7 @@ public class GeodeRules {
           @Override public int size() {
             return rowType.getFieldCount();
           }
-        });
+        }, true);
   }
 
   /**
@@ -130,14 +129,13 @@ public class GeodeRules {
 
     @Override public void onMatch(RelOptRuleCall call) {
       //Do nothing
-
     }
   }
 
 
   /**
    * Rule to convert the Limit in {@link org.apache.calcite.rel.core.Sort} to a
-   * {@link GeodeSort}.
+   * {@link GeodeSortRel}.
    */
   private static class GeodeLimitRule extends RelOptRule {
 
@@ -164,7 +162,7 @@ public class GeodeRules {
           sort.getTraitSet().replace(GeodeRel.CONVENTION)
               .replace(sort.getCollation());
 
-      GeodeSort geodeSort = new GeodeSort(sort.getCluster(), traitSet,
+      GeodeSortRel geodeSort = new GeodeSortRel(sort.getCluster(), traitSet,
           convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
           sort.getCollation(), sort.fetch);
 
@@ -174,14 +172,14 @@ public class GeodeRules {
 
   /**
    * Rule to convert a {@link LogicalFilter} to a
-   * {@link GeodeFilter}.
+   * {@link GeodeFilterRel}.
    */
   private static class GeodeFilterRule extends RelOptRule {
 
     private static final GeodeFilterRule INSTANCE = new GeodeFilterRule();
 
     private GeodeFilterRule() {
-      super(operand(LogicalFilter.class, operand(GeodeTableScan.class, none())),
+      super(operand(LogicalFilter.class, operand(GeodeTableScanRel.class, none())),
           "GeodeFilterRule");
     }
 
@@ -191,7 +189,7 @@ public class GeodeRules {
       RexNode condition = filter.getCondition();
 
       // Get field names from the scan operation
-      //GeodeTableScan scan = call.rel(1);
+      //GeodeTableScanRel scan = call.rel(1);
 
       List<String> fieldNames = GeodeRules.geodeFieldNames(filter.getInput().getRowType());
 
@@ -271,7 +269,7 @@ public class GeodeRules {
      */
     public void onMatch(RelOptRuleCall call) {
       LogicalFilter filter = call.rel(0);
-      GeodeTableScan scan = call.rel(1);
+      GeodeTableScanRel scan = call.rel(1);
       if (filter.getTraitSet().contains(Convention.NONE)) {
         final RelNode converted = convert(filter, scan);
         if (converted != null) {
@@ -280,9 +278,9 @@ public class GeodeRules {
       }
     }
 
-    public RelNode convert(LogicalFilter filter, GeodeTableScan scan) {
+    public RelNode convert(LogicalFilter filter, GeodeTableScanRel scan) {
       final RelTraitSet traitSet = filter.getTraitSet().replace(GeodeRel.CONVENTION);
-      return new GeodeFilter(
+      return new GeodeFilterRel(
           filter.getCluster(),
           traitSet,
           convert(filter.getInput(), GeodeRel.CONVENTION),
@@ -314,7 +312,7 @@ public class GeodeRules {
 
   /**
    * Rule to convert a {@link LogicalProject}
-   * to a {@link GeodeProject}.
+   * to a {@link GeodeProjectRel}.
    */
   private static class GeodeProjectRule extends GeodeConverterRule {
 
@@ -338,7 +336,7 @@ public class GeodeRules {
     @Override public RelNode convert(RelNode rel) {
       final LogicalProject project = (LogicalProject) rel;
       final RelTraitSet traitSet = project.getTraitSet().replace(out);
-      return new GeodeProject(project.getCluster(), traitSet,
+      return new GeodeProjectRel(project.getCluster(), traitSet,
           convert(project.getInput(), out), project.getProjects(),
           project.getRowType());
     }

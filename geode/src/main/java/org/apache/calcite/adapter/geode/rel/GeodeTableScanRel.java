@@ -30,12 +30,13 @@ import java.util.List;
 /**
  * Relational expression representing a scan of a Geode collection.
  */
-public class GeodeTableScan extends TableScan implements GeodeRel {
+public class GeodeTableScanRel extends TableScan implements GeodeRel {
+
   final GeodeTable geodeTable;
   final RelDataType projectRowType;
 
   /**
-   * Creates a GeodeTableScan.
+   * Creates a GeodeTableScanRel.
    *
    * @param cluster        Cluster
    * @param traitSet       Traits
@@ -43,7 +44,7 @@ public class GeodeTableScan extends TableScan implements GeodeRel {
    * @param geodeTable Geode table
    * @param projectRowType Fields and types to project; null to project raw row
    */
-  protected GeodeTableScan(RelOptCluster cluster, RelTraitSet traitSet,
+  protected GeodeTableScanRel(RelOptCluster cluster, RelTraitSet traitSet,
                            RelOptTable table, GeodeTable geodeTable, RelDataType projectRowType) {
     super(cluster, traitSet, table);
     this.geodeTable = geodeTable;
@@ -70,13 +71,14 @@ public class GeodeTableScan extends TableScan implements GeodeRel {
   }
 
   /**
-   * Overrides the {@link GeodeRel#implement(Implementor)}.
-   * @param implementor - Context class that collects the feedback from the
+   * Overrides the {@link GeodeRel#implement(GeodeImplementContext)}.
+   * @param geodeImplementContext - Context class that collects the feedback from the
    */
-  @Override public void implement(Implementor implementor) {
-    implementor.geodeTable = geodeTable;
-    implementor.table = table;
+  @Override public void implement(GeodeImplementContext geodeImplementContext) {
+    // Note: Scan is the leaf and we do NOT visit its inputs
+    geodeImplementContext.geodeTable = geodeTable;
+    geodeImplementContext.table = table;
   }
 }
 
-// End GeodeTableScan.java
+// End GeodeTableScanRel.java

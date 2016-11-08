@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import org.apache.calcite.adapter.enumerable.EnumerableRel.Prefer;
+import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
 import org.apache.calcite.linq4j.AbstractEnumerable;
 import org.apache.calcite.linq4j.Enumerable;
@@ -43,7 +45,6 @@ import com.gemstone.gemfire.cache.client.ClientCache;
 import com.gemstone.gemfire.cache.query.QueryService;
 import com.gemstone.gemfire.cache.query.SelectResults;
 
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -73,15 +74,9 @@ public class GeodeTable extends AbstractQueryableTable implements TranslatableTa
     return "GeodeTable {" + regionName + "}";
   }
 
-
-  public Enumerable<Object> query(final ClientCache clientCache) {
-    return query(clientCache, Collections.<Map.Entry<String, Class>>emptyList(),
-        Collections.<Map.Entry<String, String>>emptyList(),
-        Collections.<String>emptyList(), Collections.<String>emptyList(), null);
-  }
-
   /**
-   * Executes a OQL query on the underlying table.
+   * Executes a OQL query on the underlying table. Called by the GeodeQueryable which in turn is called via the
+   * generated code.
    *
    * @param clientCache Geode client cache
    * @param fields      List of fields to project
@@ -130,8 +125,7 @@ public class GeodeTable extends AbstractQueryableTable implements TranslatableTa
     } else {
       selectString = Util.toString(new Iterable<String>() {
         public Iterator<String> iterator() {
-          final Iterator<Map.Entry<String, String>> selectIterator =
-              selectFields.iterator();
+          final Iterator<Map.Entry<String, String>> selectIterator = selectFields.iterator();
           return new Iterator<String>() {
             @Override public boolean hasNext() {
               return selectIterator.hasNext();
@@ -199,7 +193,7 @@ public class GeodeTable extends AbstractQueryableTable implements TranslatableTa
       RelOptTable relOptTable) {
 
     final RelOptCluster cluster = context.getCluster();
-    return new GeodeTableScan(cluster, cluster.traitSetOf(GeodeRel.CONVENTION),
+    return new GeodeTableScanRel(cluster, cluster.traitSetOf(GeodeRel.CONVENTION),
         relOptTable, this, null);
   }
 
@@ -217,11 +211,9 @@ public class GeodeTable extends AbstractQueryableTable implements TranslatableTa
                           GeodeTable table, String tableName) {
       super(queryProvider, schema, table, tableName);
     }
-
+    //tzolov: this should never be called for queryable tables???
     public Enumerator<T> enumerator() {
-      //noinspection unchecked
-      final Enumerable<T> enumerable = (Enumerable<T>) getTable().query(getClientCache());
-      return enumerable.enumerator();
+      throw new UnsupportedOperationException("Enumberator on Queryable should never be called (tzolov)!");
     }
 
     private GeodeTable getTable() {
@@ -235,7 +227,7 @@ public class GeodeTable extends AbstractQueryableTable implements TranslatableTa
     /**
      * Called via code-generation.
      *
-     * @see GeodeMethod#GEODE_QUERYABLE_QUERY
+     * @see GeodeToEnumerableConverterRel#implement(EnumerableRelImplementor, Prefer)
      */
     @SuppressWarnings("UnusedDeclaration")
     public Enumerable<Object> query(
