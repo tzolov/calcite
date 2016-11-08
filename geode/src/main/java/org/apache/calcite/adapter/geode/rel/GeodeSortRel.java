@@ -28,12 +28,11 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 
 /**
- * Implementation of {@link Sort}
- * relational expression in Geode.
+ * Implementation of {@link Sort} relational expression in Geode.
  */
-public class GeodeSort extends Sort implements GeodeRel {
+public class GeodeSortRel extends Sort implements GeodeRel {
 
-  public GeodeSort(RelOptCluster cluster, RelTraitSet traitSet,
+  public GeodeSortRel(RelOptCluster cluster, RelTraitSet traitSet,
                    RelNode child, RelCollation collation,
                    RexNode fetch) {
     super(cluster, traitSet, child, collation, null, fetch);
@@ -56,16 +55,16 @@ public class GeodeSort extends Sort implements GeodeRel {
 
   @Override public Sort copy(RelTraitSet traitSet, RelNode input,
                              RelCollation newCollation, RexNode offset, RexNode fetch) {
-    return new GeodeSort(getCluster(), traitSet, input, collation,
-        fetch);
+    return new GeodeSortRel(getCluster(), traitSet, input, collation, fetch);
   }
 
-  public void implement(Implementor implementor) {
-    implementor.visitChild(0, getInput());
+  @Override public void implement(GeodeImplementContext geodeImplementContext) {
+
+    ((GeodeRel) getInput()).implement(geodeImplementContext);
 
     if (fetch != null) {
-      implementor.setLimit(((RexLiteral) fetch).getValue().toString());
+      geodeImplementContext.setLimit(((RexLiteral) fetch).getValue().toString());
     }
   }
 }
-// End GeodeSort.java
+// End GeodeSortRel.java

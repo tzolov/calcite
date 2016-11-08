@@ -60,11 +60,11 @@ public class GeodeAggregationSort extends Sort implements GeodeRel {
         fetch);
   }
 
-  public void implement(Implementor implementor) {
-    implementor.visitChild(0, getInput());
+  public void implement(GeodeImplementContext geodeImplementContext) {
+    ((GeodeRel) getInput()).implement(geodeImplementContext);
 
     if (fetch != null) {
-      implementor.setLimit(((RexLiteral) fetch).getValue().toString());
+      geodeImplementContext.setLimit(((RexLiteral) fetch).getValue().toString());
     }
   }
 }

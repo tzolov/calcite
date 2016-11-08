@@ -36,7 +36,7 @@ public class GeodeToEnumerableConverterRule extends ConverterRule {
 
   @Override public RelNode convert(RelNode rel) {
     RelTraitSet newTraitSet = rel.getTraitSet().replace(getOutConvention());
-    return new GeodeToEnumerableConverter(rel.getCluster(), newTraitSet, rel);
+    return new GeodeToEnumerableConverterRel(rel.getCluster(), newTraitSet, rel);
   }
 }
 

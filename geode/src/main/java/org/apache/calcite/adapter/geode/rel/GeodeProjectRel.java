@@ -33,12 +33,11 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.Pair;
 
 /**
- * Implementation of {@link Project}
- * relational expression in Geode.
+ * Implementation of {@link Project} relational expression in Geode.
  */
-public class GeodeProject extends Project implements GeodeRel {
+public class GeodeProjectRel extends Project implements GeodeRel {
 
-  public GeodeProject(RelOptCluster cluster, RelTraitSet traitSet,
+  public GeodeProjectRel(RelOptCluster cluster, RelTraitSet traitSet,
                       RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
     super(cluster, traitSet, input, projects, rowType);
     assert getConvention() == GeodeRel.CONVENTION;
@@ -47,15 +46,17 @@ public class GeodeProject extends Project implements GeodeRel {
 
   @Override public Project copy(RelTraitSet traitSet, RelNode input,
                                 List<RexNode> projects, RelDataType rowType) {
-    return new GeodeProject(getCluster(), traitSet, input, projects, rowType);
+    return new GeodeProjectRel(getCluster(), traitSet, input, projects, rowType);
   }
 
   @Override public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
     return super.computeSelfCost(planner, mq).multiplyBy(0.1);
   }
 
-  public void implement(Implementor implementor) {
-    implementor.visitChild(0, getInput());
+  @Override public void implement(GeodeImplementContext geodeImplementContext) {
+
+    ((GeodeRel) getInput()).implement(geodeImplementContext);
+
     final RexToGeodeTranslator translator =
         new RexToGeodeTranslator(
             //(JavaTypeFactory) getCluster().getTypeFactory(),
@@ -66,8 +67,8 @@ public class GeodeProject extends Project implements GeodeRel {
       final String originalName = pair.left.accept(translator);
       fields.put(originalName, name);
     }
-    implementor.add(fields, null);
+    geodeImplementContext.add(fields, null);
   }
 }
 
-// End GeodeProject.java
+// End GeodeProjectRel.java

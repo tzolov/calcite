@@ -67,9 +67,9 @@ public class GeodeAdapter2IT {
         .returnsCount(1)
         .returns("itemNumber=123; retailCost=34.99; yearPublished=2011; description=Run on sentences and drivel on " +
                 "all things mundane; author=Daisy Mae West; title=A Treatise of Treatises\n")
-        .explainContains("PLAN=GeodeToEnumerableConverter\n" +
-            "  GeodeFilter(condition=[=(CAST($0):INTEGER, 123)])\n" +
-            "    GeodeTableScan(table=[[TEST, BookMaster]])");
+        .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+            "  GeodeFilterRel(condition=[=(CAST($0):INTEGER, 123)])\n" +
+            "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
   }
 
   @Test public void testWhereWithAnd() {
@@ -80,9 +80,9 @@ public class GeodeAdapter2IT {
         .returnsCount(1)
         .returns("itemNumber=123; retailCost=34.99; yearPublished=2011; description=Run on sentences and drivel on " +
                 "all things mundane; author=Daisy Mae West; title=A Treatise of Treatises\n")
-        .explainContains("PLAN=GeodeToEnumerableConverter\n" +
-            "  GeodeFilter(condition=[AND(>($0, 122), <=($0, 123))])\n" +
-            "    GeodeTableScan(table=[[TEST, BookMaster]])");
+        .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+            "  GeodeFilterRel(condition=[AND(>($0, 122), <=($0, 123))])\n" +
+            "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
   }
 
   @Test public void testWhereWithOr() {
@@ -93,11 +93,11 @@ public class GeodeAdapter2IT {
             "WHERE \"itemNumber\" = 123 OR \"itemNumber\" = 789")
         .returnsCount(2)
         .returnsUnordered("author=Jim Heavisides", "author=Daisy Mae West")
-        .explainContains("PLAN=GeodeToEnumerableConverter\n" +
-            "  GeodeProject(author=[$4])\n" +
-            "    GeodeFilter(condition=[OR(=(CAST($0):INTEGER, 123), " +
+        .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+            "  GeodeProjectRel(author=[$4])\n" +
+            "    GeodeFilterRel(condition=[OR(=(CAST($0):INTEGER, 123), " +
             "=(CAST($0):INTEGER, 789))])\n" +
-            "      GeodeTableScan(table=[[TEST, BookMaster]])\n");
+            "      GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
   }
 
 
@@ -109,12 +109,12 @@ public class GeodeAdapter2IT {
             "WHERE (\"itemNumber\" > 123 AND \"itemNumber\" = 789) OR \"author\"='Daisy Mae West'")
         .returnsCount(2)
         .returnsUnordered("author=Jim Heavisides", "author=Daisy Mae West")
-        .explainContains("PLAN=GeodeToEnumerableConverter\n" +
-                         "  GeodeProject(author=[$4])\n" +
-                         "    GeodeFilter(condition=[OR(AND(>($0, 123), =(CAST($0):INTEGER, 789)), " +
+        .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                         "  GeodeProjectRel(author=[$4])\n" +
+                         "    GeodeFilterRel(condition=[OR(AND(>($0, 123), =(CAST($0):INTEGER, 789)), " +
                                   "=(CAST($4):VARCHAR(14) CHARACTER SET \"ISO-8859-1\" " +
                                   "COLLATE \"ISO-8859-1$en_US$primary\", 'Daisy Mae West'))])\n" +
-                         "      GeodeTableScan(table=[[TEST, BookMaster]])\n" +
+                         "      GeodeTableScanRel(table=[[TEST, BookMaster]])\n" +
                          "\n");
   }
 
@@ -139,10 +139,10 @@ public class GeodeAdapter2IT {
         .returnsCount(2)
         .returns("author=Clarence Meeks\n" +
             "author=Jim Heavisides\n")
-        .explainContains("PLAN=GeodeToEnumerableConverter\n" +
-            "  GeodeProject(author=[$4])\n" +
-            "    GeodeFilter(condition=[>($0, 123)])\n" +
-            "      GeodeTableScan(table=[[TEST, BookMaster]])");
+        .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+            "  GeodeProjectRel(author=[$4])\n" +
+            "    GeodeFilterRel(condition=[>($0, 123)])\n" +
+            "      GeodeTableScanRel(table=[[TEST, BookMaster]])");
   }
 
   @Test public void testLimit() {
@@ -153,9 +153,9 @@ public class GeodeAdapter2IT {
         .returnsCount(1)
         .returns("itemNumber=123; retailCost=34.99; yearPublished=2011; description=Run on sentences and drivel on " +
                 "all things mundane; author=Daisy Mae West; title=A Treatise of Treatises\n")
-        .explainContains("PLAN=GeodeToEnumerableConverter\n" +
-            "  GeodeSort(fetch=[1])\n" +
-            "    GeodeTableScan(table=[[TEST, BookMaster]])");
+        .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+            "  GeodeSortRel(fetch=[1])\n" +
+            "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
   }
 
 }

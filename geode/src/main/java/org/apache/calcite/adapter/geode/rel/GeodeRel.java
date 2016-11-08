@@ -36,19 +36,21 @@ public interface GeodeRel extends RelNode {
   Convention CONVENTION = new Convention.Impl("GEODE", GeodeRel.class);
 
   /**
-   * Callback for the implementation process that converts a tree of {
-   * @link GeodeRel} nodes into a OQL query.
+   * Callback for the implementation process that collects the context from the
+   * @link GeodeRel} required to converts the relational tree into physical such.
    *
-   * @param implementor - Context class that collects the feedback from the
+   * @param geodeImplementContext - Context class that collects the feedback from the
    *                    call back method calls
    */
-  void implement(Implementor implementor);
+  void implement(GeodeImplementContext geodeImplementContext);
 
   /**
+   * Shared context used by the GoedeRel relations.
+   *
    * Callback context class for the implementation process that converts a tree of
    * {@link GeodeRel} nodes into a OQL query.
    */
-  class Implementor {
+  class GeodeImplementContext {
     final Map<String, String> selectFields = new LinkedHashMap<String, String>();
     final List<String> whereClause = new ArrayList<String>();
     final List<String> order = new ArrayList<String>();
@@ -76,7 +78,6 @@ public interface GeodeRel extends RelNode {
       groupFields.addAll(groupFields);
     }
 
-
     public void addOrder(List<String> newOrder) {
       order.addAll(newOrder);
     }
@@ -85,9 +86,17 @@ public interface GeodeRel extends RelNode {
       limitValue = limit;
     }
 
-    public void visitChild(int ordinal, RelNode input) {
-      assert ordinal == 0;
-      ((GeodeRel) input).implement(this);
+    @Override
+    public String toString() {
+      return "GeodeImplementContext{" +
+              "selectFields=" + selectFields +
+              ", whereClause=" + whereClause +
+              ", order=" + order +
+              ", limitValue='" + limitValue + '\'' +
+              ", groupByFields=" + groupByFields +
+              ", table=" + table +
+              ", geodeTable=" + geodeTable +
+              '}';
     }
   }
 }
