@@ -29,7 +29,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public class GeodeAdapter2IT {
   /**
-   * Connection factory based on the "mongo-zips" model.
+   * Connection factory based on the "geode relational " model.
    */
   public static final ImmutableMap<String, String> GEODE =
       ImmutableMap.of("model",
