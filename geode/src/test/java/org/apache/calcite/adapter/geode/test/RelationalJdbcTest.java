@@ -65,7 +65,7 @@ public class RelationalJdbcTest {
 						+ "       operand: {\n"
 						+ "         locatorHost: 'localhost', \n"
 						+ "         locatorPort: '10334', \n"
-						+ "         regions: 'BookMaster', \n"
+						+ "         regions: 'BookMaster,Customer,InventoryItem,BookOrder', \n"
 						+ "         pdxSerializablePackagePath: 'net.tzolov.geode.bookstore.domain.*' \n"
 						+ "       }\n"
 						+ "     }\n"
@@ -74,28 +74,23 @@ public class RelationalJdbcTest {
 
 		Class.forName("org.apache.calcite.jdbc.Driver");
 
-		Connection connection =
-				DriverManager.getConnection("jdbc:calcite:", info);
-
+		Connection connection = DriverManager.getConnection("jdbc:calcite:", info);
 		Statement statement = connection.createStatement();
-
-	    ResultSet resultSet = statement.executeQuery("SELECT * FROM \"TEST\".\"BookMaster\"");
+	    ResultSet resultSet = statement.executeQuery(
+	    		"SELECT b.\"totalPrice\", c.\"firstName\" " +
+				"FROM \"TEST\".\"BookOrder\" as b " +
+				"INNER JOIN \"TEST\".\"Customer\" as c ON b.\"customerNumber\" = c.\"customerNumber\" " +
+				"WHERE  b.\"totalPrice\" > 0");
 
 
 		final StringBuilder buf = new StringBuilder();
 		while (resultSet.next()) {
 			ResultSetMetaData metaData = resultSet.getMetaData();
-			int n = metaData.getColumnCount();
-			for (int i = 1; i <= n; i++) {
-				buf.append(i > 1 ? "; " : "")
-						.append(metaData.getColumnLabel(i))
-						.append("=")
-						.append(resultSet.getObject(i));
-			}
+			for (int i = 1; i <= metaData.getColumnCount(); i++)
+				buf.append(i > 1 ? "; " : "").append(metaData.getColumnLabel(i)).append("=").append(resultSet.getObject(i));
 			System.out.println(buf.toString());
 			buf.setLength(0);
 		}
-
 		resultSet.close();
 		statement.close();
 		connection.close();

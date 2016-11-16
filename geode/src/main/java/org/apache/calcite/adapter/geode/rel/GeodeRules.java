@@ -124,11 +124,13 @@ public class GeodeRules {
 //
 //      System.out.println(sort.getRowType().getFieldList().get(fieldCollations.get(1).getFieldIndex()));
 //      System.out.println(sort.getCollation().getFieldCollations());
-      return fieldCollations.size() <= groupSetCardinality;
+      boolean numberOfSortFieldsMatchesNumberOfDistinctSuch = fieldCollations.size() <= groupSetCardinality;
+      return numberOfSortFieldsMatchesNumberOfDistinctSuch;
     }
 
     @Override public void onMatch(RelOptRuleCall call) {
       //Do nothing
+      System.out.println(call);
     }
   }
 
