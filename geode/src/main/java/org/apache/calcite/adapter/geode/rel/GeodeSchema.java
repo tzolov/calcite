@@ -22,13 +22,13 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.util.trace.CalciteTrace;
 
+import org.apache.geode.cache.Region;
+import org.apache.geode.cache.client.ClientCache;
 import org.slf4j.Logger;
 
 import static org.apache.calcite.adapter.geode.util.GeodeUtils.createClientCache;
 import static org.apache.calcite.adapter.geode.util.GeodeUtils.createRelDataType;
 
-import com.gemstone.gemfire.cache.Region;
-import com.gemstone.gemfire.cache.client.ClientCache;
 import com.google.common.collect.ImmutableMap;
 
 import java.util.Iterator;

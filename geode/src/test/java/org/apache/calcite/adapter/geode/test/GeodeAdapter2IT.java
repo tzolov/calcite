@@ -158,4 +158,163 @@ public class GeodeAdapter2IT {
             "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
   }
 
+  @Test public void testSortWithLimit() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select * from \"BookMaster\" ORDER BY \"yearPublished\" LIMIT 1")
+            .returnsCount(1)
+            .returns("itemNumber=456; retailCost=11.99; yearPublished=1971; description=A book about a dog; " +
+                    "author=Clarence Meeks; title=Clifford the Big Red Dog\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeSortRel(sort0=[$2], dir0=[ASC], fetch=[1])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
+  }
+
+  @Test public void testSortBy2Columns() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\", \"itemNumber\" from \"BookMaster\" ORDER BY \"yearPublished\" ASC, \"itemNumber\" DESC")
+            .returnsCount(3)
+            .returns("yearPublished=1971; itemNumber=456\n" +
+                    "yearPublished=2011; itemNumber=789\n" +
+                    "yearPublished=2011; itemNumber=123\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC])\n" +
+                    "    GeodeProjectRel(yearPublished=[$2], itemNumber=[$0])\n" +
+                    "      GeodeTableScanRel(table=[[TEST, BookMaster]])");
+  }
+
+  //
+  // TEST Group By and Aggregation Function Support
+  //
+
+  /**
+   * OQL Error: Query contains group by columns not present in projected fields
+   * Solution: Automatically expand the projections to include all missing GROUP By columns.
+   */
+  @Test public void testAddMissingGroupByCoumnToProjectedFields() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\" from \"BookMaster\" GROUP BY  \"yearPublished\", \"author\"")
+            .returnsCount(3)
+            .returns("yearPublished=1971\n" +
+                    "yearPublished=2011\n" +
+                    "yearPublished=2011\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeProjectRel(yearPublished=[$0])\n" +
+                    "    GeodeAggregateRel(group=[{2, 4}])\n" +
+                    "      GeodeTableScanRel(table=[[TEST, BookMaster]])");
+  }
+
+  /**
+   * When the group by columns match the projected fields, the optimizers removes the projected relation.
+   */
+  @Test public void testMissingProjectRelationOnGroupByColumnMatchingProjectedFields() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\" from \"BookMaster\" GROUP BY \"yearPublished\"")
+            .returnsCount(2)
+            .returns("yearPublished=1971\n" +
+                    "yearPublished=2011\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{2}])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
+  }
+
+  /**
+   * When the group by columns match the projected fields, the optimizers removes the projected relation.
+   */
+  @Test public void testMissingProjectRelationOnGroupByColumnMatchingProjectedFields2() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\", MAX(\"retailCost\") from \"BookMaster\" GROUP BY \"yearPublished\"")
+            .returnsCount(2)
+            .returns("yearPublished=1971; EXPR$1=11.99\n" +
+                    "yearPublished=2011; EXPR$1=59.99\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{2}], EXPR$1=[MAX($1)])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
+  }
+
+  @Test public void testCount() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select COUNT(\"retailCost\") from \"BookMaster\"")
+            .returnsCount(1)
+            .returns("EXPR$0=3\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{}], EXPR$0=[COUNT($1)])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
+  }
+
+  @Test public void testCountStar() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select COUNT(*) from \"BookMaster\"")
+            .returnsCount(1)
+            .returns("EXPR$0=3\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{}], EXPR$0=[COUNT()])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
+  }
+
+  @Test public void testCountInGroupBy() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\", COUNT(\"retailCost\") from \"BookMaster\" GROUP BY \"yearPublished\"")
+            .returnsCount(2)
+            .returns("yearPublished=1971; EXPR$1=1\n" +
+                    "yearPublished=2011; EXPR$1=2\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{2}], EXPR$1=[COUNT($1)])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
+  }
+
+  @Test public void testMaxMinSumAvg() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select MAX(\"retailCost\"), MIN(\"retailCost\"), SUM(\"retailCost\"), AVG(\"retailCost\") from \"BookMaster\"")
+            .returnsCount(1)
+            .returns("EXPR$0=59.99; EXPR$1=11.99; EXPR$2=106.97; EXPR$3=35.656666\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{}], EXPR$0=[MAX($1)], EXPR$1=[MIN($1)], EXPR$2=[SUM($1)], EXPR$3=[AVG($1)])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
+  }
+
+  @Test public void testMaxMinSumAvgInGroupBy() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\", MAX(\"retailCost\"), MIN(\"retailCost\"), SUM(\"retailCost\"), AVG(\"retailCost\") from \"BookMaster\" GROUP BY  \"yearPublished\"")
+            .returnsCount(2)
+            .returns("yearPublished=2011; EXPR$1=59.99; EXPR$2=34.99; EXPR$3=94.98; EXPR$4=47.49\n" +
+                    "yearPublished=1971; EXPR$1=11.99; EXPR$2=11.99; EXPR$3=11.99; EXPR$4=11.99\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeAggregateRel(group=[{2}], EXPR$1=[MAX($1)], EXPR$2=[MIN($1)], EXPR$3=[SUM($1)], EXPR$4=[AVG($1)])\n" +
+                    "    GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
+  }
+
+  @Test public void testGroupBy() {
+    CalciteAssert.that()
+            .enable(enabled())
+            .with(GEODE)
+            .query("select \"yearPublished\", MAX(\"retailCost\") AS MAXCOST, \"author\" from \"BookMaster\" GROUP BY \"yearPublished\", \"author\"")
+            .returnsCount(3)
+            .returns("yearPublished=2011; MAXCOST=59.99; author=Jim Heavisides\n" +
+                    "yearPublished=2011; MAXCOST=34.99; author=Daisy Mae West\n" +
+                    "yearPublished=1971; MAXCOST=11.99; author=Clarence Meeks\n")
+            .explainContains("PLAN=GeodeToEnumerableConverterRel\n" +
+                    "  GeodeProjectRel(yearPublished=[$0], MAXCOST=[$2], author=[$1])\n" +
+                    "    GeodeAggregateRel(group=[{2, 4}], MAXCOST=[MAX($1)])\n" +
+                    "      GeodeTableScanRel(table=[[TEST, BookMaster]])\n");
+  }
 }

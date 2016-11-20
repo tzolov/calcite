@@ -29,9 +29,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
-
-import com.gemstone.gemfire.cache.client.ClientCache;
-import com.gemstone.gemfire.pdx.PdxInstance;
+import org.apache.geode.cache.client.ClientCache;
 
 /**
  * Created by tzoloc on 5/4/16.
@@ -46,6 +44,7 @@ public class GeodeScannableTable extends AbstractTable implements ScannableTable
   public GeodeScannableTable(String regionName, Class<?> regionValueClass,
                              ClientCache clientCache) {
     super();
+
     this.regionName = regionName;
     //this.regionValueClass = regionValueClass;
     this.clientCache = clientCache;

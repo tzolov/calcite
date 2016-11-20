@@ -21,15 +21,15 @@ import java.util.List;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.geode.cache.CacheClosedException;
+import org.apache.geode.cache.Region;
+import org.apache.geode.cache.client.ClientCache;
+import org.apache.geode.cache.client.ClientCacheFactory;
+import org.apache.geode.cache.client.ClientRegionShortcut;
+import org.apache.geode.cache.query.Struct;
+import org.apache.geode.pdx.PdxInstance;
+import org.apache.geode.pdx.ReflectionBasedAutoSerializer;
 
-import com.gemstone.gemfire.cache.CacheClosedException;
-import com.gemstone.gemfire.cache.Region;
-import com.gemstone.gemfire.cache.client.ClientCache;
-import com.gemstone.gemfire.cache.client.ClientCacheFactory;
-import com.gemstone.gemfire.cache.client.ClientRegionShortcut;
-import com.gemstone.gemfire.cache.query.Struct;
-import com.gemstone.gemfire.pdx.PdxInstance;
-import com.gemstone.gemfire.pdx.ReflectionBasedAutoSerializer;
 
 /**
  * Created by tzoloc on 5/11/16.

@@ -28,8 +28,8 @@ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+import org.apache.geode.pdx.PdxInstance;
 
-import com.gemstone.gemfire.pdx.PdxInstance;
 
 /**
  * Implementation of {@link JavaTypeFactory}.

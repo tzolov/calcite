@@ -16,6 +16,9 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import java.util.AbstractList;
+import java.util.List;
+
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -27,6 +30,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.type.RelDataType;
@@ -41,308 +45,338 @@ import org.apache.calcite.util.ImmutableBitSet;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 
-import java.util.AbstractList;
-import java.util.List;
-
 /**
  * Rules and relational operators for {@link GeodeRel#CONVENTION} calling convention.
  */
 public class GeodeRules {
 
-  public static final RelOptRule[] RULES = {
-      GeodeFilterRule.INSTANCE,
-      GeodeProjectRule.INSTANCE,
-      GeodeLimitRule.INSTANCE,
-      GeodeSpecialSortRule.INSTANCE
-  };
+	public static final RelOptRule[] RULES = {
+			GeodeFilterRule.INSTANCE,
+			GeodeProjectRule.INSTANCE,
+			GeodeSortLimitRule.INSTANCE,
+			//GeodeSpecialSortRule.INSTANCE,
+			GeodeAggregateRule.INSTANCE
+	};
 
-  private GeodeRules() {
-  }
+	private GeodeRules() {
+	}
 
-  static List<String> geodeFieldNames(final RelDataType rowType) {
-    return SqlValidatorUtil.uniquify(
-        new AbstractList<String>() {
-          @Override public String get(int index) {
-            return rowType.getFieldList().get(index).getName();
-          }
+	static List<String> geodeFieldNames(final RelDataType rowType) {
 
-          @Override public int size() {
-            return rowType.getFieldCount();
-          }
-        }, true);
-  }
+		List<String> fieldNames = new AbstractList<String>() {
+			@Override
+			public String get(int index) {
+				return rowType.getFieldList().get(index).getName();
+			}
+			@Override
+			public int size() {
+				return rowType.getFieldCount();
+			}
+		};
 
-  /**
-   * Translator from {@link RexNode} to strings in Geode's expression
-   * language.
-   */
-  static class RexToGeodeTranslator extends RexVisitorImpl<String> {
-  //  private final JavaTypeFactory typeFactory;
-    private final List<String> inFields;
+		return SqlValidatorUtil.uniquify(fieldNames, true);
+	}
 
-    protected RexToGeodeTranslator(
-        //JavaTypeFactory typeFactory,
-                                   List<String> inFields) {
-      super(true);
-//      this.typeFactory = typeFactory;
-      this.inFields = inFields;
-    }
+	/**
+	 * Translator from {@link RexNode} to strings in Geode's expression language.
+	 */
+	static class RexToGeodeTranslator extends RexVisitorImpl<String> {
 
-    @Override public String visitInputRef(RexInputRef inputRef) {
-      return inFields.get(inputRef.getIndex());
-    }
-  }
+		private final List<String> inFields;
 
+		protected RexToGeodeTranslator(List<String> inFields) {
+			super(true);
+			this.inFields = inFields;
+		}
 
-  /**
-   * Geode supports ORDER BY only in combination with SELECT DISTINCT statement. The relational
-   * algebra representation of the the SELECT DISTINCT (field list) statement
-   * is GROUP BY (field list).
-   */
-  private static class GeodeSpecialSortRule extends RelOptRule {
+		@Override
+		public String visitInputRef(RexInputRef inputRef) {
+			return inFields.get(inputRef.getIndex());
+		}
 
-    private static final GeodeSpecialSortRule INSTANCE = new GeodeSpecialSortRule();
+		@Override
+		public String visitCall(RexCall call) {
+			return super.visitCall(call);
+		}
+	}
 
-    public GeodeSpecialSortRule() {
-      super(operand(Sort.class, operand(Aggregate.class, any())), "GeodeSpecialSortRule");
-    }
+	/**
+	 * Rule to convert a {@link LogicalProject} to a {@link GeodeProjectRel}.
+	 */
+	private static class GeodeProjectRule extends GeodeConverterRule {
 
-    @Override public boolean matches(RelOptRuleCall call) {
-      final Sort sort = call.rel(0);
-      final Aggregate aggregate = call.rel(1);
-      boolean same = sort.getRowType().equals(aggregate.getRowType());
-      System.out.println("Same:" + same);
-      ImmutableBitSet groupSet = aggregate.getGroupSet();
+		private static final GeodeProjectRule INSTANCE = new GeodeProjectRule();
 
-      int groupSetCardinality = groupSet.cardinality();
+		private GeodeProjectRule() {
+			super(LogicalProject.class, "GeodeProjectRule");
+		}
 
-      List<String> aggregateFields = GeodeRules.geodeFieldNames(aggregate.getRowType());
+		@Override
+		public boolean matches(RelOptRuleCall call) {
+//			LogicalProject project = call.rel(0);
+//			for (RexNode e : project.getProjects()) {
+//				if (!(e instanceof RexInputRef)) {
+//					return false;
+//				}
+//			}
 
-      //aggregate.getRowType().getFieldList().get(aggregate.)
-      List<RelFieldCollation> fieldCollations = sort.getCollation().getFieldCollations();
+			return true;
+		}
+
+		@Override
+		public RelNode convert(RelNode rel) {
+			final LogicalProject project = (LogicalProject) rel;
+			final RelTraitSet traitSet = project.getTraitSet().replace(out);
+			return new GeodeProjectRel(project.getCluster(), traitSet,
+					convert(project.getInput(), out), project.getProjects(),
+					project.getRowType());
+		}
+	}
+
+	/**
+	 * Geode supports ORDER BY only in combination with SELECT DISTINCT statement. The relational
+	 * algebra representation of the the SELECT DISTINCT (field list) statement
+	 * is GROUP BY (field list).
+	 */
+	private static class GeodeSpecialSortRule extends RelOptRule {
+
+		private static final GeodeSpecialSortRule INSTANCE = new GeodeSpecialSortRule();
+
+		public GeodeSpecialSortRule() {
+			super(operand(Sort.class, operand(Aggregate.class, any())), "GeodeSpecialSortRule");
+		}
+
+		@Override
+		public boolean matches(RelOptRuleCall call) {
+			final Sort sort = call.rel(0);
+			final Aggregate aggregate = call.rel(1);
+			boolean same = sort.getRowType().equals(aggregate.getRowType());
+			System.out.println("Same:" + same);
+			ImmutableBitSet groupSet = aggregate.getGroupSet();
+
+			int groupSetCardinality = groupSet.cardinality();
+
+			List<String> aggregateFields = GeodeRules.geodeFieldNames(aggregate.getRowType());
+
+			//aggregate.getRowType().getFieldList().get(aggregate.)
+			List<RelFieldCollation> fieldCollations = sort.getCollation().getFieldCollations();
 //      System.out.println(fieldCollations.size() <= groupSetCardinality);
 //
 //      System.out.println(sort.getRowType().getFieldList().get(fieldCollations.get(1).getFieldIndex()));
 //      System.out.println(sort.getCollation().getFieldCollations());
-      boolean numberOfSortFieldsMatchesNumberOfDistinctSuch = fieldCollations.size() <= groupSetCardinality;
-      return numberOfSortFieldsMatchesNumberOfDistinctSuch;
-    }
+			boolean numberOfSortFieldsMatchesNumberOfDistinctSuch = fieldCollations.size() <= groupSetCardinality;
+			return numberOfSortFieldsMatchesNumberOfDistinctSuch;
+		}
 
-    @Override public void onMatch(RelOptRuleCall call) {
-      //Do nothing
-      System.out.println(call);
-    }
-  }
+		@Override
+		public void onMatch(RelOptRuleCall call) {
+			//Do nothing
+			System.out.println(call);
+		}
+	}
+
+	/**
+	 * Rule to convert the Limit in {@link org.apache.calcite.rel.core.Aggregate} to a
+	 * {@link GeodeAggregateRel}.
+	 */
+	private static class GeodeAggregateRule extends GeodeConverterRule {
+
+		private static final GeodeAggregateRule INSTANCE = new GeodeAggregateRule();
+
+		public GeodeAggregateRule() {
+			super(LogicalAggregate.class, "GeodeAggregateRule");
+		}
+
+		@Override
+		public RelNode convert(RelNode rel) {
+			final LogicalAggregate aggregate = (LogicalAggregate) rel;
+			final RelTraitSet traitSet = aggregate.getTraitSet().replace(out);
+			return new GeodeAggregateRel(
+					aggregate.getCluster(),
+					traitSet,
+					convert(aggregate.getInput(), traitSet.simplify()), // or , out?
+					aggregate.indicator,
+					aggregate.getGroupSet(),
+					aggregate.getGroupSets(),
+					aggregate.getAggCallList());
+		}
+	}
 
 
-  /**
-   * Rule to convert the Limit in {@link org.apache.calcite.rel.core.Sort} to a
-   * {@link GeodeSortRel}.
-   */
-  private static class GeodeLimitRule extends RelOptRule {
+	/**
+	 * Rule to convert the Limit in {@link org.apache.calcite.rel.core.Sort} to a
+	 * {@link GeodeSortRel}.
+	 */
+	private static class GeodeSortLimitRule extends RelOptRule {
 
-    private static final GeodeLimitRule INSTANCE = new GeodeLimitRule(new Predicate<Sort>() {
-      public boolean apply(Sort input) {
-        // OQL has no support for offsets (e.g. LIMIT 10 OFFSET 500)
-        return input.offset == null;
-      }
-    });
+		private static final GeodeSortLimitRule INSTANCE = new GeodeSortLimitRule(new Predicate<Sort>() {
+			public boolean apply(Sort input) {
+				// OQL has no support for offsets (e.g. LIMIT 10 OFFSET 500)
+				// TODO it might be better to ignore the OFFSET instead
+				return input.offset == null;
+			}
+		});
 
-    public GeodeLimitRule(Predicate<Sort> predicate) {
-      super(operand(Sort.class, null, predicate, any()), "GeodeLimitRule");
-    }
+		public GeodeSortLimitRule(Predicate<Sort> predicate) {
+			super(operand(Sort.class, null, predicate, any()), "GeodeSortLimitRule");
+		}
 
-    @Override public boolean matches(RelOptRuleCall call) {
-      final Sort sort = call.rel(0);
-      return sort.fetch != null;
-    }
+		@Override
+		public void onMatch(RelOptRuleCall call) {
+			final Sort sort = call.rel(0);
 
-    @Override public void onMatch(RelOptRuleCall call) {
-      final Sort sort = call.rel(0);
+			final RelTraitSet traitSet = sort.getTraitSet().replace(GeodeRel.CONVENTION)
+					.replace(sort.getCollation());
 
-      final RelTraitSet traitSet =
-          sort.getTraitSet().replace(GeodeRel.CONVENTION)
-              .replace(sort.getCollation());
+			GeodeSortRel geodeSort = new GeodeSortRel(sort.getCluster(), traitSet,
+					convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
+					sort.getCollation(), sort.fetch);
 
-      GeodeSortRel geodeSort = new GeodeSortRel(sort.getCluster(), traitSet,
-          convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
-          sort.getCollation(), sort.fetch);
+			call.transformTo(geodeSort);
+		}
+	}
 
-      call.transformTo(geodeSort);
-    }
-  }
+	/**
+	 * Rule to convert a {@link LogicalFilter} to a
+	 * {@link GeodeFilterRel}.
+	 */
+	private static class GeodeFilterRule extends RelOptRule {
 
-  /**
-   * Rule to convert a {@link LogicalFilter} to a
-   * {@link GeodeFilterRel}.
-   */
-  private static class GeodeFilterRule extends RelOptRule {
+		private static final GeodeFilterRule INSTANCE = new GeodeFilterRule();
 
-    private static final GeodeFilterRule INSTANCE = new GeodeFilterRule();
+		private GeodeFilterRule() {
+			super(operand(LogicalFilter.class, operand(GeodeTableScanRel.class, none())),
+					"GeodeFilterRule");
+		}
 
-    private GeodeFilterRule() {
-      super(operand(LogicalFilter.class, operand(GeodeTableScanRel.class, none())),
-          "GeodeFilterRule");
-    }
+		@Override
+		public boolean matches(RelOptRuleCall call) {
+			// Get the condition from the filter operation
+			LogicalFilter filter = call.rel(0);
+			RexNode condition = filter.getCondition();
 
-    @Override public boolean matches(RelOptRuleCall call) {
-      // Get the condition from the filter operation
-      LogicalFilter filter = call.rel(0);
-      RexNode condition = filter.getCondition();
+			// Get field names from the scan operation
+			//GeodeTableScanRel scan = call.rel(1);
 
-      // Get field names from the scan operation
-      //GeodeTableScanRel scan = call.rel(1);
+			List<String> fieldNames = GeodeRules.geodeFieldNames(filter.getInput().getRowType());
 
-      List<String> fieldNames = GeodeRules.geodeFieldNames(filter.getInput().getRowType());
+			List<RexNode> disjunctions = RelOptUtil.disjunctions(condition);
+			if (disjunctions.size() != 1) {
+				//return false;
+				return true;
+			}
+			else {
+				//Check that all conjunctions are primary field conditions.
+				condition = disjunctions.get(0);
+				for (RexNode predicate : RelOptUtil.conjunctions(condition)) {
+					if (!isEqualityOnKey(predicate, fieldNames)) {
+						return false;
+					}
+				}
+			}
 
-      List<RexNode> disjunctions = RelOptUtil.disjunctions(condition);
-      if (disjunctions.size() != 1) {
-        //return false;
-        return true;
-      } else {
-        //Check that all conjunctions are primary field conditions.
-        condition = disjunctions.get(0);
-        for (RexNode predicate : RelOptUtil.conjunctions(condition)) {
-          if (!isEqualityOnKey(predicate, fieldNames)) {
-            return false;
-          }
-        }
-      }
+			return true;
+		}
 
-      return true;
-    }
+		/**
+		 * Check if the node is a supported predicate (primary field condition).
+		 *
+		 * @param node       Condition node to check
+		 * @param fieldNames Names of all columns in the table
+		 * @return True if the node represents an equality predicate on a primary key
+		 */
+		private boolean isEqualityOnKey(RexNode node, List<String> fieldNames) {
 
-    /**
-     * Check if the node is a supported predicate (primary field condition).
-     *
-     * @param node       Condition node to check
-     * @param fieldNames Names of all columns in the table
-     * @return True if the node represents an equality predicate on a primary key
-     */
-    private boolean isEqualityOnKey(RexNode node, List<String> fieldNames) {
+			RexCall call = (RexCall) node;
+			final RexNode left = call.operands.get(0);
+			final RexNode right = call.operands.get(1);
 
-      RexCall call = (RexCall) node;
-      final RexNode left = call.operands.get(0);
-      final RexNode right = call.operands.get(1);
+			if (checkConditionContasInputRefOrLiterals(left, right, fieldNames)) {
+				return true;
+			}
+			return checkConditionContasInputRefOrLiterals(right, left, fieldNames);
 
-      if (checkConditionContasInputRefOrLiterals(left, right, fieldNames)) {
-        return true;
-      }
-      return checkConditionContasInputRefOrLiterals(right, left, fieldNames);
+		}
 
-    }
+		/**
+		 * @param left       Left operand of the equality
+		 * @param right      Right operand of the equality
+		 * @param fieldNames Names of all columns in the table
+		 * @return The {true} if condition is supported
+		 */
+		private boolean checkConditionContasInputRefOrLiterals(RexNode left, RexNode right, List<String> fieldNames) {
+			// FIXME Ignore casts for rel and assume they aren't really necessary
+			if (left.isA(SqlKind.CAST)) {
+				left = ((RexCall) left).getOperands().get(0);
+			}
 
-    /**
-     * @param left       Left operand of the equality
-     * @param right      Right operand of the equality
-     * @param fieldNames Names of all columns in the table
-     * @return The {true} if condition is supported
-     */
-    private boolean checkConditionContasInputRefOrLiterals(RexNode left, RexNode right, List<String> fieldNames) {
-      // FIXME Ignore casts for rel and assume they aren't really necessary
-      if (left.isA(SqlKind.CAST)) {
-        left = ((RexCall) left).getOperands().get(0);
-      }
+			if (right.isA(SqlKind.CAST)) {
+				right = ((RexCall) right).getOperands().get(0);
+			}
 
-      if (right.isA(SqlKind.CAST)) {
-        right = ((RexCall) right).getOperands().get(0);
-      }
+			if (left.isA(SqlKind.INPUT_REF) && right.isA(SqlKind.LITERAL)) {
+				final RexInputRef left1 = (RexInputRef) left;
+				String name = fieldNames.get(left1.getIndex());
+				return name != null;
+			} else if (left.isA(SqlKind.INPUT_REF) && right.isA(SqlKind.INPUT_REF)) {
 
-      if (left.isA(SqlKind.INPUT_REF) && right.isA(SqlKind.LITERAL)) {
-        final RexInputRef left1 = (RexInputRef) left;
-        String name = fieldNames.get(left1.getIndex());
-        return name != null;
-      } else if (left.isA(SqlKind.INPUT_REF) && right.isA(SqlKind.INPUT_REF)) {
+				final RexInputRef left1 = (RexInputRef) left;
+				String leftName = fieldNames.get(left1.getIndex());
 
-        final RexInputRef left1 = (RexInputRef) left;
-        String leftName = fieldNames.get(left1.getIndex());
+				final RexInputRef right1 = (RexInputRef) right;
+				String rightName = fieldNames.get(right1.getIndex());
 
-        final RexInputRef right1 = (RexInputRef) right;
-        String rightName = fieldNames.get(right1.getIndex());
+				return (leftName != null) && (rightName != null);
+			}
 
-        return (leftName != null) && (rightName != null);
-      }
+			return false;
+		}
 
-      return false;
-    }
+		/**
+		 * @see ConverterRule
+		 */
+		public void onMatch(RelOptRuleCall call) {
+			LogicalFilter filter = call.rel(0);
+			GeodeTableScanRel scan = call.rel(1);
+			if (filter.getTraitSet().contains(Convention.NONE)) {
+				final RelNode converted = convert(filter, scan);
+				if (converted != null) {
+					call.transformTo(converted);
+				}
+			}
+		}
 
-    /**
-     * @see ConverterRule
-     */
-    public void onMatch(RelOptRuleCall call) {
-      LogicalFilter filter = call.rel(0);
-      GeodeTableScanRel scan = call.rel(1);
-      if (filter.getTraitSet().contains(Convention.NONE)) {
-        final RelNode converted = convert(filter, scan);
-        if (converted != null) {
-          call.transformTo(converted);
-        }
-      }
-    }
+		public RelNode convert(LogicalFilter filter, GeodeTableScanRel scan) {
+			final RelTraitSet traitSet = filter.getTraitSet().replace(GeodeRel.CONVENTION);
+			return new GeodeFilterRel(
+					filter.getCluster(),
+					traitSet,
+					convert(filter.getInput(), GeodeRel.CONVENTION),
+					filter.getCondition());
+		}
+	}
 
-    public RelNode convert(LogicalFilter filter, GeodeTableScanRel scan) {
-      final RelTraitSet traitSet = filter.getTraitSet().replace(GeodeRel.CONVENTION);
-      return new GeodeFilterRel(
-          filter.getCluster(),
-          traitSet,
-          convert(filter.getInput(), GeodeRel.CONVENTION),
-          filter.getCondition());
-    }
-  }
+	/**
+	 * Base class for planner rules that convert a relational expression to
+	 * Geode calling convention.
+	 */
+	abstract static class GeodeConverterRule extends ConverterRule {
+		protected final Convention out;
 
-  /**
-   * Base class for planner rules that convert a relational expression to
-   * Geode calling convention.
-   */
-  abstract static class GeodeConverterRule extends ConverterRule {
-    protected final Convention out;
+		public GeodeConverterRule(
+				Class<? extends RelNode> clazz,
+				String description) {
+			this(clazz, Predicates.<RelNode>alwaysTrue(), description);
+		}
 
-    public GeodeConverterRule(
-        Class<? extends RelNode> clazz,
-        String description) {
-      this(clazz, Predicates.<RelNode>alwaysTrue(), description);
-    }
-
-    public <R extends RelNode> GeodeConverterRule(
-        Class<R> clazz,
-        Predicate<? super R> predicate,
-        String description) {
-      super(clazz, predicate, Convention.NONE, GeodeRel.CONVENTION, description);
-      this.out = GeodeRel.CONVENTION;
-    }
-  }
-
-  /**
-   * Rule to convert a {@link LogicalProject}
-   * to a {@link GeodeProjectRel}.
-   */
-  private static class GeodeProjectRule extends GeodeConverterRule {
-
-    private static final GeodeProjectRule INSTANCE = new GeodeProjectRule();
-
-    private GeodeProjectRule() {
-      super(LogicalProject.class, "GeodeProjectRule");
-    }
-
-    @Override public boolean matches(RelOptRuleCall call) {
-      LogicalProject project = call.rel(0);
-      for (RexNode e : project.getProjects()) {
-        if (!(e instanceof RexInputRef)) {
-          return false;
-        }
-      }
-
-      return true;
-    }
-
-    @Override public RelNode convert(RelNode rel) {
-      final LogicalProject project = (LogicalProject) rel;
-      final RelTraitSet traitSet = project.getTraitSet().replace(out);
-      return new GeodeProjectRel(project.getCluster(), traitSet,
-          convert(project.getInput(), out), project.getProjects(),
-          project.getRowType());
-    }
-  }
+		public <R extends RelNode> GeodeConverterRule(
+				Class<R> clazz,
+				Predicate<? super R> predicate,
+				String description) {
+			super(clazz, predicate, Convention.NONE, GeodeRel.CONVENTION, description);
+			this.out = GeodeRel.CONVENTION;
+		}
+	}
 }
 
 // End GeodeRules.java

@@ -16,11 +16,15 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -31,6 +35,9 @@ import org.apache.calcite.rex.RexNode;
  * Implementation of {@link Sort} relational expression in Geode.
  */
 public class GeodeSortRel extends Sort implements GeodeRel {
+
+  public static final String ASC = "ASC";
+  public static final String DESC = "DESC";
 
   public GeodeSortRel(RelOptCluster cluster, RelTraitSet traitSet,
                    RelNode child, RelCollation collation,
@@ -45,12 +52,20 @@ public class GeodeSortRel extends Sort implements GeodeRel {
                                               RelMetadataQuery mq) {
 
     RelOptCost cost = super.computeSelfCost(planner, mq);
-    if (fetch == null) {
-      return cost;
+
+    if (!collation.getFieldCollations().isEmpty() || fetch != null) {
+      return cost.multiplyBy(0.05);
     } else {
-      // We do this so we get the limit for free
-      return planner.getCostFactory().makeZeroCost();
+      return cost;
     }
+
+
+//    if (fetch == null) {
+//      return cost;
+//    } else {
+//      // We do this so we get the limit for free
+//      return planner.getCostFactory().makeZeroCost();
+//    }
   }
 
   @Override public Sort copy(RelTraitSet traitSet, RelNode input,
@@ -62,9 +77,35 @@ public class GeodeSortRel extends Sort implements GeodeRel {
 
     ((GeodeRel) getInput()).implement(geodeImplementContext);
 
+
+    List<RelFieldCollation> sortCollations = collation.getFieldCollations();
+
+    if (!sortCollations.isEmpty()) {
+
+      List<String> orderByFields = new ArrayList<String>();
+
+      for (RelFieldCollation fieldCollation : sortCollations) {
+        final String name = fieldName(fieldCollation.getFieldIndex());
+        orderByFields.add(name + " " + direction(fieldCollation.getDirection()));
+      }
+      geodeImplementContext.addOrderByFields(orderByFields);
+    }
+
+
     if (fetch != null) {
       geodeImplementContext.setLimit(((RexLiteral) fetch).getValue().toString());
     }
+  }
+
+  private String fieldName(int index) {
+    return getRowType().getFieldList().get(index).getName();
+  }
+
+  private String direction(RelFieldCollation.Direction relDirection) {
+    if (relDirection.equals(RelFieldCollation.Direction.DESCENDING)) {
+      return DESC;
+    }
+    return ASC;
   }
 }
 // End GeodeSortRel.java

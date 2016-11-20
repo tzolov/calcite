@@ -16,6 +16,10 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.calcite.adapter.enumerable.EnumerableRel.Prefer;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
@@ -24,13 +28,11 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
-import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rel.type.RelProtoDataType;
@@ -40,205 +42,241 @@ import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Util;
+import org.apache.geode.cache.client.ClientCache;
+import org.apache.geode.cache.query.QueryService;
+import org.apache.geode.cache.query.SelectResults;
 
-import com.gemstone.gemfire.cache.client.ClientCache;
-import com.gemstone.gemfire.cache.query.QueryService;
-import com.gemstone.gemfire.cache.query.SelectResults;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList.Builder;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 
 /**
  * Table based on a Geode Region
  */
 public class GeodeTable extends AbstractQueryableTable implements TranslatableTable {
 
-  private GeodeSchema schema;
-  private String regionName;
-  private RelDataType relDataType;
-  private ClientCache clientCache;
+	private GeodeSchema schema;
 
-  public GeodeTable(GeodeSchema schema,
-                    String regionName,
-                    RelDataType relDataType,
-                    ClientCache clientCache) {
-    super(Object[].class);
-    this.schema = schema;
-    this.regionName = regionName;
-    this.relDataType = relDataType;
-    this.clientCache = clientCache;
-  }
+	private String regionName;
 
-  public String toString() {
-    return "GeodeTable {" + regionName + "}";
-  }
+	private RelDataType relDataType;
 
-  /**
-   * Executes a OQL query on the underlying table. Called by the GeodeQueryable which in turn is called via the
-   * generated code.
-   *
-   * @param clientCache Geode client cache
-   * @param fields      List of fields to project
-   * @param predicates  A list of predicates which should be used in the query
-   * @return Enumerator of results
-   */
-  public Enumerable<Object> query(
-      final ClientCache clientCache,
-      List<Map.Entry<String, Class>> fields,
-      final List<Map.Entry<String, String>> selectFields,
-      List<String> predicates,
-      List<String> order, String limit) {
+	private ClientCache clientCache;
 
-    // Build the type of the resulting row based on the provided fields
-    final RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
-    final RelDataTypeFactory.FieldInfoBuilder fieldInfo = typeFactory.builder();
+	public GeodeTable(GeodeSchema schema,
+			String regionName,
+			RelDataType relDataType,
+			ClientCache clientCache) {
+		super(Object[].class);
+		this.schema = schema;
+		this.regionName = regionName;
+		this.relDataType = relDataType;
+		this.clientCache = clientCache;
+	}
 
-    //final RelDataType rowType = protoRowType.apply(typeFactory); TODO ?
-    final RelDataType rowType = this.getRowType(typeFactory);
+	public String toString() {
+		return "GeodeTable {" + regionName + "}";
+	}
 
-    Function1<String, Void> addField = new Function1<String, Void>() {
-      public Void apply(String fieldName) {
-        RelDataTypeField field = rowType.getField(fieldName, true, false);
-        SqlTypeName typeName = field.getType().getSqlTypeName();
-        fieldInfo.add(fieldName, typeFactory.createSqlType(typeName)).nullable(true);
-        return null;
-      }
-    };
+	/**
+	 * Executes a OQL query on the underlying table. Called by the GeodeQueryable which in turn is called via the
+	 * generated code.
+	 *
+	 * @param clientCache Geode client cache
+	 * @param fields      List of fields to project
+	 * @param predicates  A list of predicates which should be used in the query
+	 * @return Enumerator of results
+	 */
+	public Enumerable<Object> query(
+			final ClientCache clientCache,
+			final List<Map.Entry<String, Class>> fields,
+			final List<Map.Entry<String, String>> selectFields,
+			final List<Map.Entry<String, String>> aggregateFunctions,
+			final List<String> groupByFields,
+			List<String> predicates,
+			List<String> orderByFields,
+			String limit) {
 
-    if (selectFields.isEmpty()) {
-      for (Map.Entry<String, Class> field : fields) {
-        addField.apply(field.getKey());
-      }
-    } else {
-      for (Map.Entry<String, String> field : selectFields) {
-        addField.apply(field.getKey());
-      }
-    }
+		// Build the type of the resulting row based on the provided fields
+		final RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+		final RelDataTypeFactory.FieldInfoBuilder fieldInfo = typeFactory.builder();
 
-    final RelProtoDataType resultRowType = RelDataTypeImpl.proto(fieldInfo.build());
+		for (Map.Entry<String, Class> field : fields) {
+			SqlTypeName typeName = typeFactory.createJavaType(field.getValue()).getSqlTypeName();
+			fieldInfo.add(field.getKey(), typeFactory.createSqlType(typeName)).nullable(true);
+		}
 
-    // Construct the list of fields to project
-    final String selectString;
-    if (selectFields.isEmpty()) {
-      selectString = "*";
-    } else {
-      selectString = Util.toString(new Iterable<String>() {
-        public Iterator<String> iterator() {
-          final Iterator<Map.Entry<String, String>> selectIterator = selectFields.iterator();
-          return new Iterator<String>() {
-            @Override public boolean hasNext() {
-              return selectIterator.hasNext();
-            }
+		final RelProtoDataType resultRowType = RelDataTypeImpl.proto(fieldInfo.build());
 
-            @Override public String next() {
-              Map.Entry<String, String> entry = selectIterator.next();
-              return entry.getKey() + " AS " + entry.getValue();
-            }
+		ImmutableMap<String, String> aggFuncMap = ImmutableMap.of();
+		if (!aggregateFunctions.isEmpty()) {
+			ImmutableMap.Builder<String, String> aggFuncMapBuilder = ImmutableMap.builder();
+			for (Map.Entry<String, String> e : aggregateFunctions) {
+				aggFuncMapBuilder.put(e.getKey(), e.getValue());
+			}
+			aggFuncMap = aggFuncMapBuilder.build();
+		}
 
-            @Override public void remove() {
-              throw new UnsupportedOperationException();
-            }
-          };
-        }
-      }, "", ", ", "");
-    }
+		// Construct the list of fields to project
+		Builder<String> selectBuilder = ImmutableList.builder();
+		if (!groupByFields.isEmpty()) {
+			if (selectFields.isEmpty()) {
+				// Use the Group By Fields for projection
+				for (String groupByField : groupByFields) {
+					selectBuilder.add(groupByField + " AS " + groupByField);
+				}
+				if (!aggFuncMap.isEmpty()) {
+					for (Map.Entry<String, String> e : aggFuncMap.entrySet()) {
+						selectBuilder.add(e.getValue() + " AS " + e.getKey());
+					}
+				}
+			}
+			else {
+				ImmutableSet.Builder<Object> setFieldsBuilder = ImmutableSet.builder();
 
-    // Combine all predicates conjunctively
-    String whereClause = "";
-    if (!predicates.isEmpty()) {
-      whereClause = " WHERE ";
-      whereClause += Util.toString(predicates, "", " AND ", "");
-    }
+				for (Map.Entry<String, String> field : selectFields) {
+					setFieldsBuilder.add(field.getKey());
+					String fieldName = field.getKey();
+					fieldName = aggFuncMap.containsKey(fieldName) ? aggFuncMap.get(fieldName) : fieldName;
 
-    // Build and issue the query and return an Enumerator over the results
-    StringBuilder queryBuilder = new StringBuilder("SELECT ");
-    queryBuilder.append(selectString);
-    queryBuilder.append(" FROM /" + regionName);
-    queryBuilder.append(whereClause);
-    if (!order.isEmpty()) {
-      queryBuilder.append(Util.toString(order, " ORDER BY ", ", ", ""));
-    }
-    if (limit != null) {
-      queryBuilder.append(" LIMIT " + limit);
-    }
+					selectBuilder.add(fieldName + " AS " + field.getValue());
+				}
 
-    final String oqlQuery = queryBuilder.toString();
+				// Expand the selection expression to include all group by fields
+				ImmutableSet<Object> setFields = setFieldsBuilder.build();
+				for (String groupByField: groupByFields) {
+					if (!setFields.contains(groupByField)) {
+						selectBuilder.add(groupByField + " AS " + groupByField);
+					}
+				}
+			}
+		}
+		else {
+			if (selectFields.isEmpty()) {
+				if (!aggFuncMap.isEmpty()) {
+					for (Map.Entry<String, String> e : aggFuncMap.entrySet()) {
+						selectBuilder.add(e.getValue() + " AS " + e.getKey());
+					}
+				} else {
+					selectBuilder.add("*");
+				}
+			}
+			else {
+				for (Map.Entry<String, String> field : selectFields) {
+					selectBuilder.add(field.getKey() + " AS " + field.getValue());
+				}
+			}
+		}
+		final String oqlSelectStatement = Util.toString(selectBuilder.build(), " ", ", ", "");
 
-    System.out.println("OQL: " + oqlQuery);
+		// Combine all predicates conjunctively
+		String whereClause = "";
+		if (!predicates.isEmpty()) {
+			whereClause = " WHERE ";
+			whereClause += Util.toString(predicates, "", " AND ", "");
+		}
 
-    return new AbstractEnumerable<Object>() {
-      public Enumerator<Object> enumerator() {
-        SelectResults results = null;
-        QueryService queryService = clientCache.getQueryService();
+		// Build and issue the query and return an Enumerator over the results
+		StringBuilder queryBuilder = new StringBuilder("SELECT ");
+		queryBuilder.append(oqlSelectStatement);
+		queryBuilder.append(" FROM /" + regionName);
+		queryBuilder.append(whereClause);
 
-        try {
-          results = (SelectResults) queryService.newQuery(oqlQuery).execute();
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
+		if (!groupByFields.isEmpty()) {
+			queryBuilder.append(Util.toString(groupByFields, " GROUP BY ", ", ", ""));
+		}
 
-        return new GeodeEnumerator(results, resultRowType);
-      }
-    };
-  }
+		if (!orderByFields.isEmpty()) {
+			queryBuilder.append(Util.toString(orderByFields, " ORDER BY ", ", ", ""));
+		}
+		if (limit != null) {
+			queryBuilder.append(" LIMIT " + limit);
+		}
 
-  public <T> Queryable<T> asQueryable(QueryProvider queryProvider,
-                                      SchemaPlus schema, String tableName) {
-    return new GeodeQueryable<>(queryProvider, schema, this, tableName);
-  }
+		final String oqlQuery = queryBuilder.toString();
 
-  @Override public RelNode toRel(
-      RelOptTable.ToRelContext context,
-      RelOptTable relOptTable) {
+		System.out.println("OQL: " + oqlQuery);
 
-    final RelOptCluster cluster = context.getCluster();
-    return new GeodeTableScanRel(cluster, cluster.traitSetOf(GeodeRel.CONVENTION),
-        relOptTable, this, null);
-  }
+		return new AbstractEnumerable<Object>() {
+			public Enumerator<Object> enumerator() {
+				SelectResults results = null;
+				QueryService queryService = clientCache.getQueryService();
 
-  @Override public RelDataType getRowType(RelDataTypeFactory typeFactory) {
-    return relDataType;
-  }
+				try {
+					results = (SelectResults) queryService.newQuery(oqlQuery).execute();
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
 
-  /**
-   * Implementation of {@link Queryable} based on
-   * a {@link GeodeTable}.
-   */
-  public static class GeodeQueryable<T> extends AbstractTableQueryable<T> {
+				return new GeodeEnumerator(results, resultRowType);
+			}
+		};
+	}
 
-    public GeodeQueryable(QueryProvider queryProvider, SchemaPlus schema,
-                          GeodeTable table, String tableName) {
-      super(queryProvider, schema, table, tableName);
-    }
-    //tzolov: this should never be called for queryable tables???
-    public Enumerator<T> enumerator() {
-      throw new UnsupportedOperationException("Enumberator on Queryable should never be called (tzolov)!");
-    }
+	public <T> Queryable<T> asQueryable(QueryProvider queryProvider,
+			SchemaPlus schema, String tableName) {
+		return new GeodeQueryable<>(queryProvider, schema, this, tableName);
+	}
 
-    private GeodeTable getTable() {
-      return (GeodeTable) table;
-    }
+	@Override
+	public RelNode toRel(
+			RelOptTable.ToRelContext context,
+			RelOptTable relOptTable) {
 
-    private ClientCache getClientCache() {
-      return schema.unwrap(GeodeSchema.class).clientCache;
-    }
+		final RelOptCluster cluster = context.getCluster();
+		return new GeodeTableScanRel(cluster, cluster.traitSetOf(GeodeRel.CONVENTION),
+				relOptTable, this, null);
+	}
 
-    /**
-     * Called via code-generation.
-     *
-     * @see GeodeToEnumerableConverterRel#implement(EnumerableRelImplementor, Prefer)
-     */
-    @SuppressWarnings("UnusedDeclaration")
-    public Enumerable<Object> query(
-        List<Map.Entry<String, Class>> fields,
-        List<Map.Entry<String, String>> selectFields,
-        List<String> predicates,
-        List<String> order,
-        String limit) {
-      return getTable().query(getClientCache(), fields, selectFields, predicates, order, limit);
-    }
-  }
+	@Override
+	public RelDataType getRowType(RelDataTypeFactory typeFactory) {
+		return relDataType;
+	}
+
+	/**
+	 * Implementation of {@link Queryable} based on
+	 * a {@link GeodeTable}.
+	 */
+	public static class GeodeQueryable<T> extends AbstractTableQueryable<T> {
+
+		public GeodeQueryable(QueryProvider queryProvider, SchemaPlus schema,
+				GeodeTable table, String tableName) {
+			super(queryProvider, schema, table, tableName);
+		}
+
+		//tzolov: this should never be called for queryable tables???
+		public Enumerator<T> enumerator() {
+			throw new UnsupportedOperationException("Enumberator on Queryable should never be called (tzolov)!");
+		}
+
+		private GeodeTable getTable() {
+			return (GeodeTable) table;
+		}
+
+		private ClientCache getClientCache() {
+			return schema.unwrap(GeodeSchema.class).clientCache;
+		}
+
+		/**
+		 * Called via code-generation.
+		 *
+		 * @see GeodeToEnumerableConverterRel#implement(EnumerableRelImplementor, Prefer)
+		 */
+		@SuppressWarnings("UnusedDeclaration")
+		public Enumerable<Object> query(
+				List<Map.Entry<String, Class>> fields,
+				List<Map.Entry<String, String>> selectFields,
+				List<Map.Entry<String, String>> aggregateFunctions,
+				List<String> groupByFields,
+				List<String> predicates,
+				List<String> order,
+				String limit) {
+			return getTable().query(getClientCache(), fields, selectFields, aggregateFunctions, groupByFields,
+					predicates, order, limit);
+		}
+	}
 }
 
 // End GeodeTable.java

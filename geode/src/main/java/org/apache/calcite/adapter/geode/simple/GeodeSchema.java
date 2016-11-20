@@ -23,10 +23,10 @@ import java.util.Map;
 
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.geode.cache.Region;
+import org.apache.geode.cache.client.ClientCache;
+import org.apache.geode.pdx.PdxInstance;
 
-import com.gemstone.gemfire.cache.Region;
-import com.gemstone.gemfire.cache.client.ClientCache;
-import com.gemstone.gemfire.pdx.PdxInstance;
 import com.google.common.collect.ImmutableMap;
 
 /**

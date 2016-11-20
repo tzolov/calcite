@@ -3,11 +3,14 @@ package org.apache.calcite.adapter.geode.simple;
 import static org.apache.calcite.adapter.geode.util.GeodeUtils.createClientCache;
 import static org.apache.calcite.adapter.geode.util.GeodeUtils.createRegionProxy;
 
-import com.gemstone.gemfire.cache.Region;
-import com.gemstone.gemfire.cache.client.ClientCache;
-import com.gemstone.gemfire.cache.client.ClientRegionShortcut;
-import com.gemstone.gemfire.cache.query.QueryService;
-import com.gemstone.gemfire.cache.query.SelectResults;
+import java.util.List;
+
+import org.apache.geode.cache.Region;
+import org.apache.geode.cache.client.ClientCache;
+import org.apache.geode.cache.client.ClientRegionShortcut;
+import org.apache.geode.cache.query.QueryService;
+import org.apache.geode.cache.query.SelectResults;
+
 
 /**
  * Tests for the {@code org.apache.calcite.adapter.geode} package.
@@ -47,9 +50,12 @@ public class Main1Foo {
 		String sqlQuery1 = "select itemNumber, description, retailCost from /BookMaster";
 		String sqlQuery2 = "select myBookOrders, lastName, primaryAddress from /Customer";
 		String sqlQuery3 = "select * from /Customer";
+		String sqlQuery4 = "select yearPublished, MAX(retailCost), COUNT(*) as cnt from /BookMaster GROUP BY yearPublished";
 
-		SelectResults execute = (SelectResults) queryService.newQuery(sqlQuery3).execute();
+		SelectResults execute = (SelectResults) queryService.newQuery(sqlQuery4).execute();
 
+		List b = execute.asList();
+		
 		System.out.println("Result first element class type (1) = " + (execute.asList().get(0)).getClass());
 		System.out.println("Result first element class type (2) = " + (execute.iterator().next()).getClass());
 	}

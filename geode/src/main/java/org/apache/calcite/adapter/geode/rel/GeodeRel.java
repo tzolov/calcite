@@ -16,89 +16,103 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
-import org.apache.calcite.plan.Convention;
-import org.apache.calcite.plan.RelOptTable;
-import org.apache.calcite.rel.RelNode;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.calcite.plan.Convention;
+import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.rel.RelNode;
+
+import com.google.common.collect.ImmutableMap.Builder;
 
 /**
  * Relational expression that uses Geode calling convention.
  */
 public interface GeodeRel extends RelNode {
 
-  /**
-   * Calling convention for relational operations that occur in Geode.
-   */
-  Convention CONVENTION = new Convention.Impl("GEODE", GeodeRel.class);
+	/**
+	 * Calling convention for relational operations that occur in Geode.
+	 */
+	Convention CONVENTION = new Convention.Impl("GEODE", GeodeRel.class);
 
-  /**
-   * Callback for the implementation process that collects the context from the
-   * @link GeodeRel} required to converts the relational tree into physical such.
-   *
-   * @param geodeImplementContext - Context class that collects the feedback from the
-   *                    call back method calls
-   */
-  void implement(GeodeImplementContext geodeImplementContext);
+	/**
+	 * Callback for the implementation process that collects the context from the
+	 * @link GeodeRel} required to converts the relational tree into physical such.
+	 *
+	 * @param geodeImplementContext - Context class that collects the feedback from the
+	 *                    call back method calls
+	 */
+	void implement(GeodeImplementContext geodeImplementContext);
 
-  /**
-   * Shared context used by the GoedeRel relations.
-   *
-   * Callback context class for the implementation process that converts a tree of
-   * {@link GeodeRel} nodes into a OQL query.
-   */
-  class GeodeImplementContext {
-    final Map<String, String> selectFields = new LinkedHashMap<String, String>();
-    final List<String> whereClause = new ArrayList<String>();
-    final List<String> order = new ArrayList<String>();
-    String limitValue = null;
-    final List<String> groupByFields = new ArrayList<String>();
-    RelOptTable table;
-    GeodeTable geodeTable;
+	/**
+	 * Shared context used by the GoedeRel relations.
+	 *
+	 * Callback context class for the implementation process that converts a tree of
+	 * {@link GeodeRel} nodes into a OQL query.
+	 */
+	class GeodeImplementContext {
+		final Map<String, String> selectFields = new LinkedHashMap<>();
 
-    /**
-     * Adds newly projected fields and restricted predicates.
-     *
-     * @param fields     New fields to be projected from a query
-     * @param predicates New predicates to be applied to the query
-     */
-    public void add(Map<String, String> fields, List<String> predicates) {
-      if (fields != null) {
-        selectFields.putAll(fields);
-      }
-      if (predicates != null) {
-        whereClause.addAll(predicates);
-      }
-    }
+		final List<String> whereClause = new ArrayList<>();
 
-    public void addGroupByFields(List<String> groupFields) {
-      groupFields.addAll(groupFields);
-    }
+		final List<String> orderByFields = new ArrayList<>();
 
-    public void addOrder(List<String> newOrder) {
-      order.addAll(newOrder);
-    }
+		final List<String> groupByFields = new ArrayList<>();
 
-    public void setLimit(String limit) {
-      limitValue = limit;
-    }
+		final Map<String, String> oqlAggregateFunctions = new LinkedHashMap<>();
 
-    @Override
-    public String toString() {
-      return "GeodeImplementContext{" +
-              "selectFields=" + selectFields +
-              ", whereClause=" + whereClause +
-              ", order=" + order +
-              ", limitValue='" + limitValue + '\'' +
-              ", groupByFields=" + groupByFields +
-              ", table=" + table +
-              ", geodeTable=" + geodeTable +
-              '}';
-    }
-  }
+		String limitValue = null;
+
+		RelOptTable table;
+
+		GeodeTable geodeTable;
+
+		/**
+		 * Adds newly projected fields and restricted predicates.
+		 *
+		 * @param fields     New fields to be projected from a query
+		 * @param predicates New predicates to be applied to the query
+		 */
+		public void add(Map<String, String> fields, List<String> predicates) {
+			if (fields != null) {
+				selectFields.putAll(fields);
+			}
+			if (predicates != null) {
+				whereClause.addAll(predicates);
+			}
+		}
+
+		public void addOrderByFields(List<String> orderByFieldLists) {
+			orderByFields.addAll(orderByFieldLists);
+		}
+
+		public void setLimit(String limit) {
+			limitValue = limit;
+		}
+
+		public void addGroupBy(List<String> groupByFields) {
+			this.groupByFields.addAll(groupByFields);
+		}
+
+		public void addAgregateFunctions(Map<String, String> oqlAggregateFunctions) {
+			this.oqlAggregateFunctions.putAll(oqlAggregateFunctions);
+		}
+
+		@Override
+		public String toString() {
+			return "GeodeImplementContext{" +
+					"selectFields=" + selectFields +
+					", whereClause=" + whereClause +
+					", orderByFields=" + orderByFields +
+					", limitValue='" + limitValue + '\'' +
+					", groupByFields=" + groupByFields +
+					", table=" + table +
+					", geodeTable=" + geodeTable +
+					'}';
+		}
+	}
 }
 
 // End GeodeRel.java

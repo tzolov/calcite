@@ -16,6 +16,14 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import static org.apache.calcite.adapter.geode.rel.GeodeRules.geodeFieldNames;
+
+import java.lang.reflect.Method;
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
@@ -35,19 +43,12 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.Pair;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
-
-import java.lang.reflect.Method;
-import java.util.AbstractList;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Relational expression representing a scan of a table in a Geode data source.
@@ -81,6 +82,8 @@ public class GeodeToEnumerableConverterRel extends ConverterImpl implements Enum
           List.class,
           List.class,
           List.class,
+          List.class,
+          List.class,
           String.class);
 
   /**
@@ -97,25 +100,28 @@ public class GeodeToEnumerableConverterRel extends ConverterImpl implements Enum
     final GeodeImplementContext geodeImplementContext = new GeodeImplementContext();
     ((GeodeRel) getInput()).implement(geodeImplementContext);
 
+    // PhysType is Enumerable Adapter class that maps SQL types (getRowType) with physical Java types (getJavaTypes())
     final PhysType physType = PhysTypeImpl.of(
             implementor.getTypeFactory(),
             rowType,
             pref.prefer(JavaRowFormat.ARRAY));
+
+    final List<Class> physFieldClasses = new AbstractList<Class>() {
+      public Class get(int index) {return physType.fieldClass(index);}
+      public int size() {return rowType.getFieldCount();}
+    };
 
     // Expression meta-program for calling the GeodeTable.GeodeQueryable#query method form the generated code
     final BlockBuilder blockBuilder = new BlockBuilder().append(
             Expressions.call(
                     geodeImplementContext.table.getExpression(GeodeTable.GeodeQueryable.class),
                     GEODE_QUERY_METHOD,
-                    constantArrayList(Pair.zip(
-                            GeodeRules.geodeFieldNames(rowType),
-                            new AbstractList<Class>() {
-                              public Class get(int index) {return physType.fieldClass(index);}
-                              public int size() {return rowType.getFieldCount();}
-                            }), Pair.class),
-                    constantArrayList(toListMapPairs(geodeImplementContext.selectFields), Pair.class),
+                    constantArrayList(Pair.zip(geodeFieldNames(rowType), physFieldClasses), Pair.class), // physical fields
+                    constantArrayList(toListMapPairs(geodeImplementContext.selectFields), Pair.class), // selected fields
+                    constantArrayList(toListMapPairs(geodeImplementContext.oqlAggregateFunctions), Pair.class),
+                    constantArrayList(geodeImplementContext.groupByFields, String.class),
                     constantArrayList(geodeImplementContext.whereClause, String.class),
-                    constantArrayList(geodeImplementContext.order, String.class),
+                    constantArrayList(geodeImplementContext.orderByFields, String.class),
                     Expressions.constant(geodeImplementContext.limitValue)));
 
     Hook.QUERY_PLAN.run(geodeImplementContext);

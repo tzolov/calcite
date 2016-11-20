@@ -19,10 +19,9 @@ package org.apache.calcite.adapter.geode.simple;
 import java.util.Iterator;
 
 import org.apache.calcite.linq4j.Enumerator;
-
-import com.gemstone.gemfire.cache.client.ClientCache;
-import com.gemstone.gemfire.cache.query.QueryService;
-import com.gemstone.gemfire.cache.query.SelectResults;
+import org.apache.geode.cache.client.ClientCache;
+import org.apache.geode.cache.query.QueryService;
+import org.apache.geode.cache.query.SelectResults;
 
 /**
  * Created by tzoloc
