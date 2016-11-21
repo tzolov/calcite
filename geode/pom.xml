@@ -32,6 +32,7 @@ limitations under the License.
 	<properties>
 		<top.dir>${project.basedir}/..</top.dir>
 		<checkstyle.skip>true</checkstyle.skip><!-- TODO: TO Re-enable the style check (tzolov)-->
+		<myorg.prefix>myorg.custom.client</myorg.prefix>
 	</properties>
 
 	<dependencies>
@@ -84,6 +85,87 @@ limitations under the License.
 	</dependencies>
 
 	<profiles>
+		<profile>
+			<id>uberjdbc</id>
+			<dependencies>
+				<dependency>
+					<groupId>org.apache.geode</groupId>
+					<artifactId>geode-core</artifactId>
+					<version>1.0.0-incubating</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.codehaus.janino/janino -->
+				<dependency>
+					<groupId>org.codehaus.janino</groupId>
+					<artifactId>janino</artifactId>
+					<version>2.7.6</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.codehaus.janino/commons-compiler-jdk -->
+				<dependency>
+					<groupId>org.codehaus.janino</groupId>
+					<artifactId>commons-compiler-jdk</artifactId>
+					<version>2.7.6</version>
+				</dependency>
+
+			</dependencies>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+							<artifactId>maven-shade-plugin</artifactId>
+						<version>2.4.3</version>
+						<executions>
+							<execution>
+								<phase>package</phase>
+								<goals>
+									<goal>shade</goal>
+								</goals>
+								<configuration>
+									<!--<artifactSet>-->
+										<!--<excludes>-->
+											<!--<exclude>org.codehaus.janino:janino</exclude>-->
+											<!--<exclude>org.codehaus.janino:commons-compiler-jdk</exclude>-->
+										<!--</excludes>-->
+									<!--</artifactSet>-->
+									<filters>
+										<filter>
+											<artifact>*:*</artifact>
+											<excludes>
+												<exclude>META-INF/*.SF</exclude>
+												<exclude>META-INF/*.DSA</exclude>
+												<exclude>META-INF/*.RSA</exclude>
+											</excludes>
+										</filter>
+									</filters>
+									<!-- Relocate Jackson, Protobuf, Apache Commons HttpClient and HttpComponents, but not Guava.
+										 The hypothetical "Special App" would be expecting Guava in the standard location -->
+									<!--
+									<relocations>
+										<relocation>
+											<pattern>com.fasterxml.jackson</pattern>
+											<shadedPattern>${myorg.prefix}.com.fasterxml.jackson</shadedPattern>
+										</relocation>
+										<relocation>
+											<pattern>com.google.protobuf</pattern>
+											<shadedPattern>${myorg.prefix}.com.google.protobuf</shadedPattern>
+										</relocation>
+										<relocation>
+											<pattern>org.apache.http</pattern>
+											<shadedPattern>${myorg.prefix}.org.apache.http</shadedPattern>
+										</relocation>
+										<relocation>
+											<pattern>org.apache.commons</pattern>
+											<shadedPattern>${myorg.prefix}.org.apache.commons</shadedPattern>
+										</relocation>
+									</relocations>
+									-->
+									<createDependencyReducedPom>false</createDependencyReducedPom>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
 		<profile>
 			<id>geode</id>
 			<activation>
