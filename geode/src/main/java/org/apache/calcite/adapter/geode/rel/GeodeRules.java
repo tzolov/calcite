@@ -150,6 +150,18 @@ public class GeodeRules {
       super(LogicalProject.class, "GeodeProjectRule");
     }
 
+    @Override public boolean matches(RelOptRuleCall call) {
+      LogicalProject project = call.rel(0);
+      for (RexNode e : project.getProjects()) {
+        if (e.getType().getSqlTypeName() == SqlTypeName.GEOMETRY) {
+          // For spatial Functions Drop to Calcite Enumerable
+          return false;
+        }
+      }
+
+      return true;
+    }
+
     @Override public RelNode convert(RelNode rel) {
       final LogicalProject project = (LogicalProject) rel;
       final RelTraitSet traitSet = project.getTraitSet().replace(out);

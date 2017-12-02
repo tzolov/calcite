@@ -18,7 +18,7 @@
  */
 {
   "version": "1.0",
-  "defaultSchema": "geode",
+  "defaultSchema": "geode_raw",
   "schemas": [
     {
       "name": "geode_raw",

@@ -25,6 +25,10 @@ import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 
 import org.apache.geode.cache.query.SelectResults;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -34,6 +38,9 @@ import static org.apache.calcite.adapter.geode.util.GeodeUtils.convertToRowValue
  * Enumerator that reads from a Geode Regions.
  */
 class GeodeEnumerator implements Enumerator<Object> {
+
+  protected static final Logger LOGGER = LoggerFactory.getLogger(GeodeEnumerator.class.getName());
+
   private Iterator iterator;
   private Object current;
   private List<RelDataTypeField> fieldTypes;
@@ -45,7 +52,10 @@ class GeodeEnumerator implements Enumerator<Object> {
    * @param protoRowType The type of resulting rows
    */
   GeodeEnumerator(SelectResults results, RelProtoDataType protoRowType) {
-    this.iterator = results.iterator();
+    if (results == null) {
+      LOGGER.warn("Null OQL results!");
+    }
+    this.iterator = (results == null) ? Collections.emptyIterator() : results.iterator();
     this.current = null;
 
     final RelDataTypeFactory typeFactory =

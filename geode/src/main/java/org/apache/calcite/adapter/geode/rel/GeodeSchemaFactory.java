@@ -16,9 +16,13 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import org.apache.calcite.model.ModelHandler;
+import org.apache.calcite.runtime.GeoFunctions;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaFactory;
 import org.apache.calcite.schema.SchemaPlus;
+
+import com.google.common.collect.ImmutableList;
 
 import java.util.Map;
 
@@ -32,6 +36,7 @@ public class GeodeSchemaFactory implements SchemaFactory {
   public static final String LOCATOR_PORT = "locatorPort";
   public static final String REGIONS = "regions";
   public static final String PDX_SERIALIZABLE_PACKAGE_PATH = "pdxSerializablePackagePath";
+  public static final String ALLOW_SPATIAL_FUNCTIONS = "spatialFunction";
   public static final String COMMA_DELIMITER = ",";
 
   public GeodeSchemaFactory() {
@@ -45,6 +50,16 @@ public class GeodeSchemaFactory implements SchemaFactory {
     int locatorPort = Integer.valueOf((String) map.get(LOCATOR_PORT));
     String[] regionNames = ((String) map.get(REGIONS)).split(COMMA_DELIMITER);
     String pbxSerializablePackagePath = (String) map.get(PDX_SERIALIZABLE_PACKAGE_PATH);
+
+    boolean allowSpatialFunctions = true;
+    if (map.containsKey(ALLOW_SPATIAL_FUNCTIONS)) {
+      allowSpatialFunctions = Boolean.valueOf((String) map.get(ALLOW_SPATIAL_FUNCTIONS));
+    }
+
+    if (allowSpatialFunctions) {
+      ModelHandler.addFunctions(parentSchema, null, ImmutableList.<String>of(),
+          GeoFunctions.class.getName(), "*", true);
+    }
 
     return new GeodeSchema(locatorHost, locatorPort, regionNames,
         pbxSerializablePackagePath, parentSchema);

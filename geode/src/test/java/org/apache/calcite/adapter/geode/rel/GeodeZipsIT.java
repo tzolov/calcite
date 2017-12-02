@@ -41,7 +41,7 @@ public class GeodeZipsIT {
    * Connection factory based on the "geode relational " model.
    */
   public static final ImmutableMap<String, String> GEODE_ZIPS =
-      ImmutableMap.of("model",
+      ImmutableMap.of("CONFORMANCE", "LENIENT", "model",
           GeodeZipsIT.class.getResource("/model-zips.json")
               .getPath());
 
