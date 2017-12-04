@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.adapter.geode.rel;
+package org.apache.calcite.adapter.geode.stream;
 
 import org.apache.calcite.adapter.geode.util.GeodeUtils;
 import org.apache.calcite.schema.SchemaPlus;
@@ -35,7 +35,7 @@ import java.util.Map;
 /**
  * Schema mapped onto a Geode Regions
  */
-public class GeodeSchema extends AbstractSchema {
+public class GeodeStreamSchema extends AbstractSchema {
 
   protected static final Logger LOGGER = CalciteTrace.getPlannerTracer();
   final ClientCache clientCache;
@@ -43,9 +43,9 @@ public class GeodeSchema extends AbstractSchema {
   private String[] regionNames;
   private ImmutableMap<String, Table> tableMap;
 
-  public GeodeSchema(String locatorHost, int locatorPort,
-                     String[] regionNames, String pdxAutoSerializerPackageExp,
-                     SchemaPlus parentSchema) {
+  public GeodeStreamSchema(String locatorHost, int locatorPort,
+                           String[] regionNames, String pdxAutoSerializerPackageExp,
+                           SchemaPlus parentSchema) {
     super();
     this.regionNames = regionNames;
     this.parentSchema = parentSchema;
@@ -63,14 +63,15 @@ public class GeodeSchema extends AbstractSchema {
 
       // Extract the first entity of each Regions and use it to build a table types
       for (String regionName : regionNames) {
-        Region region = GeodeUtils.createRegionProxy(clientCache, regionName);
+        GeodeRegionChangeListener regionListener = new GeodeRegionChangeListener();
+
+        Region region = GeodeUtils.createRegionProxy(clientCache, regionName, regionListener);
 
         Iterator regionIterator = region.keySetOnServer().iterator();
 
         Object firstRegionEntry = region.get(regionIterator.next());
-        // TODO: how to handle empty Regions? JMX?
-        Table table = new GeodeTable(this, regionName,
-            GeodeUtils.createRelDataType(firstRegionEntry), clientCache);
+        Table table = new GeodeStreamScannableTable(regionName,
+            GeodeUtils.createRelDataType(firstRegionEntry, true), clientCache, regionListener);
 
         builder.put(regionName, table);
       }
@@ -82,4 +83,4 @@ public class GeodeSchema extends AbstractSchema {
   }
 }
 
-// End GeodeSchema.java
+// End GeodeStreamSchema.java

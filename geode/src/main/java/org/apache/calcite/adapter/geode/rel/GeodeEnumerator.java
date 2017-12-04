@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.adapter.geode.rel;
 
+import org.apache.calcite.adapter.geode.util.GeodeUtils;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -31,8 +32,6 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-
-import static org.apache.calcite.adapter.geode.util.GeodeUtils.convertToRowValues;
 
 /**
  * Enumerator that reads from a Geode Regions.
@@ -69,7 +68,7 @@ class GeodeEnumerator implements Enumerator<Object> {
    * @return A rel row from the results
    */
   @Override public Object current() {
-    return convertToRowValues(fieldTypes, current);
+    return GeodeUtils.convertToRowValues(fieldTypes, current);
   }
 
   @Override public boolean moveNext() {

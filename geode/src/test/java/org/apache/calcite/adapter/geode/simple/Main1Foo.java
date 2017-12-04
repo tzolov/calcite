@@ -16,6 +16,7 @@ import static org.apache.calcite.adapter.geode.util.GeodeUtils.createClientCache
  */
 public class Main1Foo {
 
+
   public static void main(String[] args) throws Exception {
 
     ClientCache clientCache = createClientCache("localhost", 10334, "net.tzolov.geode.bookstore" +
@@ -24,16 +25,14 @@ public class Main1Foo {
     QueryService queryService = clientCache.getQueryService();
 
 
-    Region bookMaster = clientCache.createClientRegionFactory(ClientRegionShortcut.PROXY).create
-        ("BookMaster");
+    Region bookMaster = clientCache.createClientRegionFactory(ClientRegionShortcut.PROXY)
+        .create("BookMaster");
+
 
     System.out.println("First key on server = " + bookMaster.keySetOnServer().iterator().next());
     System.out.println("First value on server = " + bookMaster.get(bookMaster.keySetOnServer()
         .iterator().next()));
 
-    String sqlQuery1 = "select itemNumber, description, retailCost from /BookMaster";
-    String sqlQuery2 = "select myBookOrders, lastName, primaryAddress from /Customer";
-    String sqlQuery3 = "select * from /Customer";
     String sqlQuery4 = "select yearPublished, MAX(retailCost), COUNT(*) as cnt from /BookMaster " +
         "GROUP BY yearPublished";
 
@@ -45,6 +44,12 @@ public class Main1Foo {
         .getClass());
     System.out.println("Result first element class type (2) = " + (execute.iterator().next())
         .getClass());
+
+    execute = (SelectResults) queryService.newQuery("select * from /BookMaster").execute();
+
+    JsonLoader loader = new JsonLoader(clientCache, "BookMaster",
+        "net.tzolov.geode.bookstore.domain.*");
+    loader.generateBookMasterEntries(100, 100, 1000);
   }
 }
 

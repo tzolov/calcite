@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.adapter.geode.util;
 
+import org.apache.calcite.adapter.geode.stream.GeodeRegionChangeListener;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.linq4j.tree.Primitive;
 import org.apache.calcite.rel.type.RelDataType;
@@ -129,6 +130,20 @@ public class GeodeUtils {
     return region;
   }
 
+  public static synchronized Region createRegionProxy(
+      ClientCache clientCache, String regionName, GeodeRegionChangeListener regionChangeListener) {
+
+    Region region = regionMap.get(regionName);
+    if (region == null) {
+      region = clientCache
+          .createClientRegionFactory(ClientRegionShortcut.PROXY)
+          .addCacheListener(regionChangeListener)
+          .create(regionName);
+      regionMap.put(regionName, region);
+    }
+    return region;
+  }
+
   /**
    * Convert Geode object into Row tuple
    *
@@ -139,12 +154,18 @@ public class GeodeUtils {
   public static Object convertToRowValues(
       List<RelDataTypeField> relDataTypeFields, Object geodeResultObject) {
 
+    return convertToRowValues(relDataTypeFields, geodeResultObject, false);
+  }
+
+  public static Object convertToRowValues(
+      List<RelDataTypeField> relDataTypeFields, Object geodeResultObject, boolean stream) {
+
     Object values;
 
     if (geodeResultObject instanceof Struct) {
-      values = handleStructEntry(relDataTypeFields, geodeResultObject);
+      values = handleStructEntry(relDataTypeFields, geodeResultObject, stream);
     } else if (geodeResultObject instanceof PdxInstance) {
-      values = handlePdxInstanceEntry(relDataTypeFields, geodeResultObject);
+      values = handlePdxInstanceEntry(relDataTypeFields, geodeResultObject, stream);
     } else {
       values = handleJavaObjectEntry(relDataTypeFields, geodeResultObject);
     }
@@ -156,12 +177,23 @@ public class GeodeUtils {
 
   private static Object handleStructEntry(
       List<RelDataTypeField> relDataTypeFields, Object obj) {
+    return handleStructEntry(relDataTypeFields, obj, false);
+  }
+
+  private static Object handleStructEntry(
+      List<RelDataTypeField> relDataTypeFields, Object obj, boolean stream) {
 
     Struct struct = (Struct) obj;
 
-    Object[] values = new Object[relDataTypeFields.size()];
+    Object[] values = stream ? new Object[relDataTypeFields.size() + 1]
+        : new Object[relDataTypeFields.size()];
 
-    int index = 0;
+    if (stream) {
+      values[0] = System.currentTimeMillis();
+    }
+
+    int index = stream ? 1 : 0;
+
     for (RelDataTypeField relDataTypeField : relDataTypeFields) {
       Type javaType = javaTypeFactory.getJavaClass(relDataTypeField.getType());
       Object rawValue = null;
@@ -183,13 +215,17 @@ public class GeodeUtils {
   }
 
   private static Object handlePdxInstanceEntry(
-      List<RelDataTypeField> relDataTypeFields, Object obj) {
+      List<RelDataTypeField> relDataTypeFields, Object obj, boolean stream) {
 
     PdxInstance pdxEntry = (PdxInstance) obj;
 
-    Object[] values = new Object[relDataTypeFields.size()];
+    Object[] values = stream ? new Object[relDataTypeFields.size() + 1]
+        : new Object[relDataTypeFields.size()];
+    if (stream) {
+      values[0] = System.currentTimeMillis();
+    }
 
-    int index = 0;
+    int index = stream ? 1 : 0;
     for (RelDataTypeField relDataTypeField : relDataTypeFields) {
       Type javaType = javaTypeFactory.getJavaClass(relDataTypeField.getType());
       Object rawValue = pdxEntry.getField(relDataTypeField.getName());
@@ -201,6 +237,11 @@ public class GeodeUtils {
     }
 
     return values;
+  }
+
+  private static Object handlePdxInstanceEntry(
+      List<RelDataTypeField> relDataTypeFields, Object obj) {
+    return handlePdxInstanceEntry(relDataTypeFields, obj, false);
   }
 
   private static Object handleJavaObjectEntry(
@@ -265,11 +306,15 @@ public class GeodeUtils {
 
   // Create Relational Type by inferring a Geode entry or response instance.
   public static RelDataType createRelDataType(Object regionEntry) {
+    return createRelDataType(regionEntry, false);
+  }
+
+  public static RelDataType createRelDataType(Object regionEntry, boolean stream) {
     JavaTypeFactoryExtImpl typeFactory = new JavaTypeFactoryExtImpl();
     if (regionEntry instanceof PdxInstance) {
-      return typeFactory.createPdxType((PdxInstance) regionEntry);
+      return typeFactory.createPdxType((PdxInstance) regionEntry, stream);
     } else {
-      return typeFactory.createStructType(regionEntry.getClass());
+      return typeFactory.createStructType(regionEntry.getClass(), stream);
     }
   }
 

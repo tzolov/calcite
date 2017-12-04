@@ -23,6 +23,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelRecordType;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 import org.apache.geode.pdx.PdxInstance;
 
@@ -47,8 +48,21 @@ public class JavaTypeFactoryExtImpl
    * -getdeclaredfields-in-java-reflectio
    */
   @Override public RelDataType createStructType(Class type) {
+    return createStructType(type, false);
+  }
 
+  public RelDataType createStructType(Class type, boolean stream) {
     final List<RelDataTypeField> list = new ArrayList<>();
+
+    if (stream) {
+      list.add(
+          new RelDataTypeFieldImpl(
+              "rowtime",
+              list.size(),
+              this.createSqlType(SqlTypeName.TIMESTAMP))
+      );
+    }
+
     for (Field field : type.getDeclaredFields()) {
       if (!Modifier.isStatic(field.getModifiers())) {
         // FIXME: watch out for recursion
@@ -64,7 +78,21 @@ public class JavaTypeFactoryExtImpl
   }
 
   public RelDataType createPdxType(PdxInstance pdxInstance) {
+    return createPdxType(pdxInstance, false);
+  }
+
+  public RelDataType createPdxType(PdxInstance pdxInstance, boolean stream) {
+
     final List<RelDataTypeField> list = new ArrayList<>();
+
+    if (stream) {
+      list.add(
+          new RelDataTypeFieldImpl(
+              "rowtime",
+              list.size(),
+              this.createSqlType(SqlTypeName.TIMESTAMP))
+      );
+    }
     for (String fieldName : pdxInstance.getFieldNames()) {
       Object field = pdxInstance.getField(fieldName);
 
@@ -89,32 +117,6 @@ public class JavaTypeFactoryExtImpl
     }
 
     return canonize(new RelRecordType(list));
-  }
-
-  // Experimental flattering the nested structures.
-  public RelDataType createPdxType2(PdxInstance pdxInstance) {
-    final List<RelDataTypeField> list = new ArrayList<>();
-    recursiveCreatePdxType(pdxInstance, list, "");
-    return canonize(new RelRecordType(list));
-  }
-
-  private void recursiveCreatePdxType(
-      PdxInstance pdxInstance, List<RelDataTypeField> list, String fieldNamePrefix) {
-
-    for (String fieldName : pdxInstance.getFieldNames()) {
-      Object field = pdxInstance.getField(fieldName);
-      final Type fieldType = field.getClass();
-      if (fieldType instanceof PdxInstance) {
-        recursiveCreatePdxType(
-            (PdxInstance) field, list, fieldNamePrefix + fieldName + ".");
-      } else {
-        list.add(
-            new RelDataTypeFieldImpl(
-                fieldNamePrefix + fieldName,
-                list.size(),
-                createType(fieldType)));
-      }
-    }
   }
 
 }
