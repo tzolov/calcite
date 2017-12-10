@@ -18,8 +18,9 @@ package org.apache.calcite.adapter.geode.stream;
 
 import org.apache.calcite.DataContext;
 import org.apache.calcite.config.CalciteConnectionConfig;
+import org.apache.calcite.linq4j.AbstractEnumerable;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -38,7 +39,6 @@ import org.apache.geode.cache.client.ClientCache;
 
 import com.google.common.collect.ImmutableList;
 
-import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -86,17 +86,17 @@ public class GeodeStreamScannableTable extends AbstractTable implements Scannabl
   @Override public Enumerable<Object[]> scan(DataContext root) {
     final AtomicBoolean cancelFlag = DataContext.Variable.CANCEL_FLAG.get(root);
 
-    return Linq4j.asEnumerable(new Iterable<Object[]>() {
-      @Override public Iterator<Object[]> iterator() {
-        return new GeodeStreamIterator(regionListener, cancelFlag, relDataType);
-      }
-    });
-
-//    return new AbstractEnumerable<Object[]>() {
-//      public Enumerator<Object[]> enumerator() {
-//        return new GeodeStreamEnumerator(regionListener, cancelFlag, relDataType);
+//    return Linq4j.asEnumerable(new Iterable<Object[]>() {
+//      @Override public Iterator<Object[]> iterator() {
+//        return new GeodeStreamIterator(regionListener, cancelFlag, relDataType);
 //      }
-//    };
+//    });
+
+    return new AbstractEnumerable<Object[]>() {
+      public Enumerator<Object[]> enumerator() {
+        return new GeodeStreamEnumerator(regionListener, cancelFlag, relDataType);
+      }
+    };
   }
 
   @Override public Table stream() {
