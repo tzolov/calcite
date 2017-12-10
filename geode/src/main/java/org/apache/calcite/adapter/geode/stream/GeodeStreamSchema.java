@@ -22,6 +22,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.util.trace.CalciteTrace;
 
+import org.apache.geode.cache.InterestResultPolicy;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 
@@ -51,7 +52,7 @@ public class GeodeStreamSchema extends AbstractSchema {
     this.parentSchema = parentSchema;
 
     this.clientCache = GeodeUtils.createClientCache(locatorHost, locatorPort,
-        pdxAutoSerializerPackageExp, true);
+        pdxAutoSerializerPackageExp, true, true);
   }
 
   @Override protected Map<String, Table> getTableMap() {
@@ -63,14 +64,18 @@ public class GeodeStreamSchema extends AbstractSchema {
 
       // Extract the first entity of each Regions and use it to build a table types
       for (String regionName : regionNames) {
+
         GeodeRegionChangeListener regionListener = new GeodeRegionChangeListener();
 
         Region region = GeodeUtils.createRegionProxy(clientCache, regionName, regionListener);
+        region.registerInterestRegex(".*", InterestResultPolicy.KEYS);
+        region.getAttributesMutator().addCacheListener(regionListener);
 
         Iterator regionIterator = region.keySetOnServer().iterator();
 
         Object firstRegionEntry = region.get(regionIterator.next());
-        Table table = new GeodeStreamScannableTable(regionName,
+
+        Table table = new GeodeStreamScannableTable(regionName, "rowtime",
             GeodeUtils.createRelDataType(firstRegionEntry, true), clientCache, regionListener);
 
         builder.put(regionName, table);

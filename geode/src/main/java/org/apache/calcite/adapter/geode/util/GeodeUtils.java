@@ -74,7 +74,8 @@ public class GeodeUtils {
   public static synchronized ClientCache createClientCache(
       String locatorHost, int locatorPort,
       String autoSerializerPackagePath,
-      boolean readSerialized) {
+      boolean readSerialized,
+      boolean subscriptionEnabled) {
     if (locatorPort != currentLocatorPort
         || !StringUtils.equalsIgnoreCase(currentLocatorHost, locatorHost)) {
       LOGGER.info("Close existing ClientCache ["
@@ -97,6 +98,7 @@ public class GeodeUtils {
         .addPoolLocator(locatorHost, locatorPort)
         .setPdxSerializer(new ReflectionBasedAutoSerializer(autoSerializerPackagePath))
         .setPdxReadSerialized(readSerialized)
+        .setPoolSubscriptionEnabled(subscriptionEnabled)
         .setPdxPersistent(false)
         .create();
 
@@ -185,18 +187,17 @@ public class GeodeUtils {
 
     Struct struct = (Struct) obj;
 
-    Object[] values = stream ? new Object[relDataTypeFields.size() + 1]
-        : new Object[relDataTypeFields.size()];
+    Object[] values = new Object[relDataTypeFields.size()];
 
-    if (stream) {
-      values[0] = System.currentTimeMillis();
-    }
-
-    int index = stream ? 1 : 0;
+    int index = 0;
 
     for (RelDataTypeField relDataTypeField : relDataTypeFields) {
       Type javaType = javaTypeFactory.getJavaClass(relDataTypeField.getType());
       Object rawValue = null;
+//      if (stream && index == 0) {
+//        values[0] = System.currentTimeMillis();
+//      } else {
+
       try {
         rawValue = struct.get(relDataTypeField.getName());
       } catch (IllegalArgumentException e) {
@@ -204,6 +205,7 @@ public class GeodeUtils {
         System.err.println("Could find field : " + relDataTypeField.getName());
         e.printStackTrace();
       }
+//      }
       values[index++] = convert(rawValue, (Class) javaType);
     }
 
@@ -219,16 +221,17 @@ public class GeodeUtils {
 
     PdxInstance pdxEntry = (PdxInstance) obj;
 
-    Object[] values = stream ? new Object[relDataTypeFields.size() + 1]
-        : new Object[relDataTypeFields.size()];
-    if (stream) {
-      values[0] = System.currentTimeMillis();
-    }
+    Object[] values = new Object[relDataTypeFields.size()];
 
-    int index = stream ? 1 : 0;
+    int index = 0;
     for (RelDataTypeField relDataTypeField : relDataTypeFields) {
       Type javaType = javaTypeFactory.getJavaClass(relDataTypeField.getType());
-      Object rawValue = pdxEntry.getField(relDataTypeField.getName());
+      Object rawValue;
+//      if (stream && index == 0) {
+//        rawValue = System.currentTimeMillis();
+//      } else {
+      rawValue = pdxEntry.getField(relDataTypeField.getName());
+//      }
       values[index++] = convert(rawValue, (Class) javaType);
     }
 

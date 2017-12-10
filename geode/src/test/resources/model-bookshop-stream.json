@@ -27,8 +27,8 @@
       "operand": {
         "locatorHost": "localhost",
         "locatorPort": "10334",
-        "regions": "BookMaster",
-        "pdxSerializablePackagePath": "org.apache.calcite.adapter.geode.domain.bookshop.*"
+        "regions": "BookMasterStream",
+        "pdxSerializablePackagePath": "org.apache.calcite.adapter.geode.*"
       }
     }
   ]

@@ -54,7 +54,8 @@ public class GeodeSimpleSchema extends AbstractSchema {
         locatorHost,
         locatorPort,
         pdxAutoSerializerPackageExp,
-        true);
+        true,
+        false);
   }
 
   @Override protected Map<String, Table> getTableMap() {

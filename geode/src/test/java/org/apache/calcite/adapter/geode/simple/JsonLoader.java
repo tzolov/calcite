@@ -21,13 +21,6 @@ import org.apache.geode.cache.client.ClientCache;
 import org.apache.geode.pdx.PdxInstance;
 import org.apache.geode.pdx.PdxInstanceFactory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -39,34 +32,16 @@ public class JsonLoader {
   private ClientCache cache;
   private String rootPackage;
   private Region region;
-  private ObjectMapper mapper;
   private Random random;
 
   public JsonLoader(ClientCache cache, String regionName, String rootPackage) {
     this.cache = cache;
     this.rootPackage = rootPackage;
     this.region = cache.getRegion(regionName);
-    this.mapper = new ObjectMapper();
     this.random = new Random();
   }
 
-
-  public void load(String jsonPath) throws IOException {
-
-    InputStreamReader isr = new InputStreamReader(new FileInputStream(jsonPath), "UTF-8");
-    try (BufferedReader br = new BufferedReader(isr)) {
-      int key = 0;
-      for (String line; (line = br.readLine()) != null;) {
-        Map jsonMap = mapper.readValue(line, Map.class);
-        PdxInstance pdxInstance = mapToPdx(rootPackage, jsonMap);
-
-        region.put(key++, pdxInstance);
-      }
-    }
-  }
-
-  public void generateBookMasterEntries(int count, int startKey, long waitInterval)
-      throws IOException {
+  public void generateBookMasterEntries(int count, int startKey, long waitInterval) {
 
 
     for (int i = 0; i < count; i++) {
@@ -105,13 +80,6 @@ public class JsonLoader {
     return pdxBuilder.create();
   }
 
-  public static void printJson(Object value) {
-    try {
-      System.out.println(new ObjectMapper().writeValueAsString(value));
-    } catch (JsonProcessingException e) {
-      e.printStackTrace();
-    }
-  }
 }
 
 // End JsonLoader.java

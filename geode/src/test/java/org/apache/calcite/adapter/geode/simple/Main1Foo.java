@@ -20,7 +20,7 @@ public class Main1Foo {
   public static void main(String[] args) throws Exception {
 
     ClientCache clientCache = createClientCache("localhost", 10334, "net.tzolov.geode.bookstore" +
-        ".domain.*", true);
+        ".domain.*", true, false);
 
     QueryService queryService = clientCache.getQueryService();
 

@@ -51,7 +51,7 @@ public class GeodeSchema extends AbstractSchema {
     this.parentSchema = parentSchema;
 
     this.clientCache = GeodeUtils.createClientCache(locatorHost, locatorPort,
-        pdxAutoSerializerPackageExp, true);
+        pdxAutoSerializerPackageExp, true, false);
   }
 
   @Override protected Map<String, Table> getTableMap() {

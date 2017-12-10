@@ -19,9 +19,19 @@ package org.apache.calcite.adapter.geode.stream;
 import org.apache.calcite.test.CalciteAssert;
 import org.apache.calcite.util.Util;
 
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import org.junit.Test;
+
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.util.Collection;
+
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.junit.Assert.assertThat;
 
 /**
  * Tests for the {@code org.apache.calcite.adapter.geode} package.
@@ -63,12 +73,20 @@ public class GeodeAdapterStreamBookshopIT {
   @Test
   public void testStreamSelect() {
 
-    String sql = "SELECT STREAM\n"
-        + "  FLOOR(\"rowtime\" TO SECOND) AS \"rowtime2\" \n"
-//        + "  FLOOR(\"rowtime\" TO SECOND) AS \"rowtime2\",\n"
-//        + "  SUM(\"retailCost\")\n"
+    String sqlAll = "SELECT STREAM  * FROM \"BookMaster\"\n";
+
+    String sqlOrder = "SELECT STREAM\n"
+        + "  FLOOR(\"rowtime\" TO hour) AS \"rowtime2\", \n"
+        + "  \"retailCost\"\n"
         + "FROM \"BookMaster\"\n"
-        + "GROUP BY FLOOR(\"rowtime\" TO SECOND)\n";
+        + "ORDER BY FLOOR(\"rowtime\" TO hour) \n";
+
+    String sqlGroupBy = "SELECT STREAM\n"
+        + "  FLOOR(\"rowtime\" TO hour) AS \"rowtime\", \n"
+        + "  SUM(\"retailCost\") \n"
+        + "FROM \"BookMasterStream\" \n"
+        + "GROUP BY FLOOR(\"rowtime\" TO hour) \n"
+        + "HAVING count(*) > 1 \n";
 
     String sql2 = "SELECT STREAM\n"
         + "  FLOOR(\"rowtime\" TO SECOND) AS \"rowtime2\",\n"
@@ -80,12 +98,95 @@ public class GeodeAdapterStreamBookshopIT {
         .enable(enabled())
         .withDefaultSchema("bookshopstream")
         .with(GEODE_STREAM)
-        .query(sql)
-//        .returnsCount(1);
-        .returns("boza");
-//        .explainContains("PLAN=GeodeToEnumerableConverterRel\n"
-//            + "  GeodeFilterRel(condition=[=(CAST($0):INTEGER, 123)])\n"
-//            + "    GeodeTableScanRel(table=[[TEST, BookMaster]])");
+        .query(sqlGroupBy)
+//        .limit(2)
+//        .returnsCount(1)
+        .returns(startsWith("boza"))
+
+        .explainContains("PLAN=EnumerableAggregate(group=[{0}], EXPR$1=[SUM($1)])\n"
+            + "  EnumerableCalc(expr#0..6=[{inputs}], expr#7=[FLAG(HOUR)], expr#8=[FLOOR($t0, "
+            + "$t7)], rowtime2=[$t8], retailCost=[$t3])\n"
+            + "    EnumerableInterpreter\n"
+            + "      BindableTableScan(table=[[bookshopstream, BookMaster, (STREAM)]])\n");
+  }
+
+  private Function<ResultSet, Void> startsWith(String... rows) {
+    final ImmutableList<String> rowList = ImmutableList.copyOf(rows);
+    return new Function<ResultSet, Void>() {
+      public Void apply(ResultSet input) {
+        try {
+          final ResultSetFormatter formatter =
+              new ResultSetFormatter();
+          final ResultSetMetaData metaData = input.getMetaData();
+          for (String expectedRow : rowList) {
+            if (!input.next()) {
+              throw new AssertionError("input ended too soon");
+            }
+            formatter.rowToString(input, metaData);
+            String actualRow = formatter.string();
+            assertThat(actualRow, equalTo(expectedRow));
+          }
+          return null;
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    };
+  }
+
+  /** Converts a {@link ResultSet} to string. */
+  static class ResultSetFormatter {
+    final StringBuilder buf = new StringBuilder();
+
+    public ResultSetFormatter resultSet(ResultSet resultSet)
+        throws SQLException {
+      final ResultSetMetaData metaData = resultSet.getMetaData();
+      while (resultSet.next()) {
+        rowToString(resultSet, metaData);
+        buf.append("\n");
+      }
+      return this;
+    }
+
+    /** Converts one row to a string. */
+    ResultSetFormatter rowToString(ResultSet resultSet,
+        ResultSetMetaData metaData) throws SQLException {
+      int n = metaData.getColumnCount();
+      if (n > 0) {
+        for (int i = 1;; i++) {
+          buf.append(metaData.getColumnLabel(i))
+              .append("=")
+              .append(adjustValue(resultSet.getString(i)));
+          if (i == n) {
+            break;
+          }
+          buf.append("; ");
+        }
+      }
+      return this;
+    }
+
+    protected String adjustValue(String string) {
+      return string;
+    }
+
+    public Collection<String> toStringList(ResultSet resultSet,
+        Collection<String> list) throws SQLException {
+      final ResultSetMetaData metaData = resultSet.getMetaData();
+      while (resultSet.next()) {
+        rowToString(resultSet, metaData);
+        list.add(buf.toString());
+        buf.setLength(0);
+      }
+      return list;
+    }
+
+    /** Flushes the buffer and returns its previous contents. */
+    public String string() {
+      String s = buf.toString();
+      buf.setLength(0);
+      return s;
+    }
   }
 
 }

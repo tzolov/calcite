@@ -17,24 +17,28 @@
 package org.apache.calcite.adapter.geode.stream;
 
 import org.apache.calcite.DataContext;
-import org.apache.calcite.linq4j.AbstractEnumerable;
+import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Enumerator;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
+import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.schema.StreamableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractTable;
+import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.util.ImmutableBitSet;
 
 import org.apache.geode.cache.client.ClientCache;
 
 import com.google.common.collect.ImmutableList;
 
+import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -43,24 +47,32 @@ public class GeodeStreamScannableTable extends AbstractTable implements Scannabl
     StreamableTable {
 
   private final RelDataType relDataType;
+  private final int monotonicColumnIndex;
   private GeodeRegionChangeListener regionListener;
   private String regionName;
+  private String monotonicColumnName;
   private ClientCache clientCache;
 
-  public GeodeStreamScannableTable(String regionName, RelDataType relDataType,
-      ClientCache clientCache, GeodeRegionChangeListener regionListener) {
+  public GeodeStreamScannableTable(String regionName, String monotonicColumnName,
+      RelDataType relDataType, ClientCache clientCache, GeodeRegionChangeListener regionListener) {
     super();
 
     this.regionName = regionName;
+    this.monotonicColumnName = monotonicColumnName;
     this.clientCache = clientCache;
     this.relDataType = relDataType;
     this.regionListener = regionListener;
+    this.monotonicColumnIndex = monotonicColumnIndex(monotonicColumnName, relDataType);
+  }
+
+  private int monotonicColumnIndex(String columnName, RelDataType relDataType) {
+    return relDataType.getField(columnName, true, false).getIndex();
   }
 
   @Override public Statistic getStatistic() {
     return Statistics.of(100d,
         ImmutableList.<ImmutableBitSet>of(),
-        RelCollations.createSingleton(0));
+        RelCollations.createSingleton(this.monotonicColumnIndex));
   }
 
   @Override public String toString() {
@@ -73,15 +85,36 @@ public class GeodeStreamScannableTable extends AbstractTable implements Scannabl
 
   @Override public Enumerable<Object[]> scan(DataContext root) {
     final AtomicBoolean cancelFlag = DataContext.Variable.CANCEL_FLAG.get(root);
-    return new AbstractEnumerable<Object[]>() {
-      public Enumerator<Object[]> enumerator() {
-        return new GeodeStreamEnumerator(regionListener, cancelFlag, relDataType);
+
+    return Linq4j.asEnumerable(new Iterable<Object[]>() {
+      @Override public Iterator<Object[]> iterator() {
+        return new GeodeStreamIterator(regionListener, cancelFlag, relDataType);
       }
-    };
+    });
+
+//    return new AbstractEnumerable<Object[]>() {
+//      public Enumerator<Object[]> enumerator() {
+//        return new GeodeStreamEnumerator(regionListener, cancelFlag, relDataType);
+//      }
+//    };
   }
 
   @Override public Table stream() {
     return this;
+  }
+
+  public Schema.TableType getJdbcTableType() {
+    return Schema.TableType.TABLE;
+  }
+
+  @Override public boolean isRolledUp(String column) {
+    return false;
+  }
+
+  @Override public boolean rolledUpColumnValidInsideAgg(String column,
+      SqlCall call, SqlNode parent,
+      CalciteConnectionConfig config) {
+    return false;
   }
 }
 // End GeodeStreamScannableTable.java

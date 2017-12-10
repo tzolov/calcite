@@ -54,24 +54,35 @@ public class JavaTypeFactoryExtImpl
   public RelDataType createStructType(Class type, boolean stream) {
     final List<RelDataTypeField> list = new ArrayList<>();
 
-    if (stream) {
-      list.add(
-          new RelDataTypeFieldImpl(
-              "rowtime",
-              list.size(),
-              this.createSqlType(SqlTypeName.TIMESTAMP))
-      );
-    }
+//    if (stream) {
+//      list.add(
+//          new RelDataTypeFieldImpl(
+//              "rowtime",
+//              list.size(),
+//              this.createSqlType(SqlTypeName.TIMESTAMP))
+//      );
+//    }
 
     for (Field field : type.getDeclaredFields()) {
       if (!Modifier.isStatic(field.getModifiers())) {
         // FIXME: watch out for recursion
         final Type fieldType = field.getType();
-        list.add(
-            new RelDataTypeFieldImpl(
-                field.getName(),
-                list.size(),
-                createType(fieldType)));
+
+        if (stream && field.getName().endsWith("time")) {
+          list.add(
+              new RelDataTypeFieldImpl(
+                  field.getName(),
+                  list.size(),
+                  this.createSqlType(SqlTypeName.TIMESTAMP)));
+
+        } else {
+
+          list.add(
+              new RelDataTypeFieldImpl(
+                  field.getName(),
+                  list.size(),
+                  createType(fieldType)));
+        }
       }
     }
     return canonize(new JavaRecordType(list, type));
@@ -85,14 +96,14 @@ public class JavaTypeFactoryExtImpl
 
     final List<RelDataTypeField> list = new ArrayList<>();
 
-    if (stream) {
-      list.add(
-          new RelDataTypeFieldImpl(
-              "rowtime",
-              list.size(),
-              this.createSqlType(SqlTypeName.TIMESTAMP))
-      );
-    }
+//    if (stream) {
+//      list.add(
+//          new RelDataTypeFieldImpl(
+//              "rowtime",
+//              list.size(),
+//              this.createSqlType(SqlTypeName.TIMESTAMP))
+//      );
+//    }
     for (String fieldName : pdxInstance.getFieldNames()) {
       Object field = pdxInstance.getField(fieldName);
 
@@ -109,11 +120,20 @@ public class JavaTypeFactoryExtImpl
         fieldType = field.getClass();
       }
 
-      list.add(
-          new RelDataTypeFieldImpl(
-              fieldName,
-              list.size(),
-              createType(fieldType)));
+      if (stream && fieldName.endsWith("time")) {
+        list.add(
+            new RelDataTypeFieldImpl(
+                fieldName,
+                list.size(),
+                this.createSqlType(SqlTypeName.TIMESTAMP)));
+
+      } else {
+        list.add(
+            new RelDataTypeFieldImpl(
+                fieldName,
+                list.size(),
+                createType(fieldType)));
+      }
     }
 
     return canonize(new RelRecordType(list));

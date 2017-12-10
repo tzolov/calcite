@@ -32,14 +32,12 @@ public class GeodeRegionChangeListener extends CacheListenerAdapter implements D
   @Override public void afterUpdate(EntryEvent event) {
     Object eKey = event.getKey();
     Object eVal = event.getNewValue();
-//    System.err.printf("@@@@ UPDATE EVENT: " + eKey + ":" + eVal);
     queue.add(eVal);
   }
 
   @Override public void afterCreate(EntryEvent event) {
     Object eKey = event.getKey();
     Object eVal = event.getNewValue();
-//    System.err.printf("@@@@ CREATE EVENT: " + eKey + ":" + eVal);
     queue.add(eVal);
   }
 

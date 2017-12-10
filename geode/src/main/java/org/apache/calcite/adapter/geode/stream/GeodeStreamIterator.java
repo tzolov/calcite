@@ -17,55 +17,32 @@
 package org.apache.calcite.adapter.geode.stream;
 
 import org.apache.calcite.adapter.geode.util.GeodeUtils;
-import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import org.apache.geode.cache.Declarable;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Enumerator that reads from a Geode Regions.
  */
-class GeodeStreamEnumerator implements Enumerator<Object[]>, Declarable {
-
-  protected static final Logger LOGGER =
-      LoggerFactory.getLogger(GeodeStreamEnumerator.class.getName());
+public class GeodeStreamIterator implements Iterator<Object[]> {
 
   public static final boolean IS_STREAM = true;
+  private final List<RelDataTypeField> fieldTypes;
+  private final GeodeRegionChangeListener regionChangeListener;
+  private final AtomicBoolean cancelFlag;
+  private final RelDataType relDataType;
 
-  private Object current;
-  private List<RelDataTypeField> fieldTypes;
-  private GeodeRegionChangeListener regionChangeListener;
-  private AtomicBoolean cancelFlag;
-
-  /**
-   * Creates a GeodeEnumerator.
-   */
-  GeodeStreamEnumerator(GeodeRegionChangeListener regionChangeListener, AtomicBoolean cancelFlag,
-      RelDataType relDataType) {
+  public GeodeStreamIterator(GeodeRegionChangeListener regionChangeListener, AtomicBoolean
+      cancelFlag, RelDataType relDataType) {
     this.regionChangeListener = regionChangeListener;
     this.cancelFlag = cancelFlag;
-    this.current = null;
-
+    this.relDataType = relDataType;
     this.fieldTypes = relDataType.getFieldList();
   }
 
-  /**
-   * Produce the next row from the results
-   *
-   * @return A rel row from the results
-   */
-  @Override public Object[] current() {
-    return (Object[]) GeodeUtils.convertToRowValues(fieldTypes, current, IS_STREAM);
-  }
-
-  @Override public boolean moveNext() {
+  @Override public boolean hasNext() {
     if (cancelFlag.get()) {
       return false;
     }
@@ -78,22 +55,18 @@ class GeodeStreamEnumerator implements Enumerator<Object[]>, Declarable {
       }
     }
 
-    current = regionChangeListener.poll();
-    if (current == null) {
-      LOGGER.warn("current is Null. Should have been caught by the regionChangeListener.isEmpty()");
-      return false;
-    }
-
     return true;
   }
 
-  @Override public void reset() {
-    this.regionChangeListener.clear();
+  @Override public Object[] next() {
+    Object[] next = (Object[]) GeodeUtils.convertToRowValues(fieldTypes,
+        this.regionChangeListener.poll(), IS_STREAM);
+    return next;
   }
 
-  @Override public void close() {
-    // Nothing to do here
-    this.regionChangeListener.clear();
+  @Override public void remove() {
+    throw new UnsupportedOperationException();
   }
 }
-// End GeodeStreamEnumerator.java
+
+// End GeodeStreamIterator.java
